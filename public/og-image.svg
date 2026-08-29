@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#312e81"/>
+    </linearGradient>
+    <linearGradient id="cardBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Subtle grid decorative lines -->
+  <g stroke="#ffffff" stroke-opacity="0.05" stroke-width="1">
+    <line x1="0" y1="150" x2="1200" y2="150"/>
+    <line x1="0" y1="300" x2="1200" y2="300"/>
+    <line x1="0" y1="450" x2="1200" y2="450"/>
+    <line x1="300" y1="0" x2="300" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/>
+    <line x1="900" y1="0" x2="900" y2="630"/>
+  </g>
+
+  <!-- Brand Pill -->
+  <g transform="translate(100, 80)">
+    <rect width="260" height="42" rx="21" fill="#6366f1" fill-opacity="0.2" stroke="#818cf8" stroke-width="1.5"/>
+    <circle cx="24" cy="21" r="6" fill="#10b981"/>
+    <text x="42" y="27" fill="#e0e7ff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="600" letter-spacing="1">100% CLIENT-SIDE</text>
+  </g>
+
+  <!-- Main Heading -->
+  <text x="100" y="195" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="58" font-weight="800" letter-spacing="-1">
+    MarkDown Stripper
+  </text>
+  <text x="100" y="250" fill="#a5b4fc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="28" font-weight="500">
+    Free Online Markdown to Clean Plain Text Converter
+  </text>
+
+  <!-- Feature Tags -->
+  <g transform="translate(100, 290)">
+    <rect x="0" y="0" width="180" height="38" rx="10" fill="#334155" fill-opacity="0.8"/>
+    <text x="90" y="24" fill="#f8fafc" font-family="sans-serif" font-size="15" font-weight="600" text-anchor="middle">⚡ Instant Stripping</text>
+
+    <rect x="195" y="0" width="185" height="38" rx="10" fill="#334155" fill-opacity="0.8"/>
+    <text x="287" y="24" fill="#f8fafc" font-family="sans-serif" font-size="15" font-weight="600" text-anchor="middle">📄 Word (.DOCX) Export</text>
+
+    <rect x="395" y="0" width="190" height="38" rx="10" fill="#334155" fill-opacity="0.8"/>
+    <text x="490" y="24" fill="#f8fafc" font-family="sans-serif" font-size="15" font-weight="600" text-anchor="middle">🔒 Zero Data Storage</text>
+
+    <rect x="600" y="0" width="180" height="38" rx="10" fill="#334155" fill-opacity="0.8"/>
+    <text x="690" y="24" fill="#f8fafc" font-family="sans-serif" font-size="15" font-weight="600" text-anchor="middle">🤖 AI Grammar Polish</text>
+  </g>
+
+  <!-- Interactive Mockup Card -->
+  <g transform="translate(100, 360)">
+    <!-- Left Input Box Preview -->
+    <rect x="0" y="0" width="480" height="200" rx="16" fill="url(#cardBg)" stroke="#334155" stroke-width="1.5"/>
+    <rect x="0" y="0" width="480" height="38" rx="16" fill="#1e293b"/>
+    <text x="24" y="25" fill="#94a3b8" font-family="monospace" font-size="14" font-weight="bold">INPUT (Markdown)</text>
+    <text x="24" y="75" fill="#cbd5e1" font-family="monospace" font-size="16"># Title of Document</text>
+    <text x="24" y="110" fill="#cbd5e1" font-family="monospace" font-size="16">This is **bold text** with [a link](url).</text>
+    <text x="24" y="145" fill="#cbd5e1" font-family="monospace" font-size="16">- [x] Complete task</text>
+
+    <!-- Arrow / Transformation -->
+    <circle cx="500" cy="100" r="22" fill="#6366f1"/>
+    <polygon points="494,90 508,100 494,110" fill="#ffffff"/>
+
+    <!-- Right Output Box Preview -->
+    <rect x="520" y="0" width="480" height="200" rx="16" fill="url(#cardBg)" stroke="#4f46e5" stroke-width="1.5"/>
+    <rect x="520" y="0" width="480" height="38" rx="16" fill="#1e1b4b"/>
+    <text x="544" y="25" fill="#818cf8" font-family="monospace" font-size="14" font-weight="bold">OUTPUT (Clean Plain Text)</text>
+    <text x="544" y="75" fill="#f8fafc" font-family="monospace" font-size="16">Title of Document</text>
+    <text x="544" y="110" fill="#f8fafc" font-family="monospace" font-size="16">This is bold text with a link.</text>
+    <text x="544" y="145" fill="#f8fafc" font-family="monospace" font-size="16">Complete task</text>
+  </g>
+
+  <!-- Domain Tag Bottom Right -->
+  <text x="1100" y="590" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="600" text-anchor="end">
+    https://markdown-stripper.site
+  </text>
+</svg>

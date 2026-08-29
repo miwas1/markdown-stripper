@@ -51,10 +51,49 @@ export default function App() {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Set document title & track page view invisibly on mount
+  // Set document title & track page view invisibly on mount, handle query parameters
   useEffect(() => {
     document.title = "MarkDown Stripper - Free Online Markdown to Plain Text Converter";
     
+    // Check URL parameters for prefilled text or sample presets
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const textParam = urlParams.get('text');
+      const sampleParam = urlParams.get('sample');
+
+      if (textParam) {
+        setMarkdown(textParam);
+      } else if (sampleParam) {
+        if (sampleParam.toLowerCase() === 'chatgpt') {
+          setMarkdown(`### ChatGPT Response Summary
+
+Here is the breakdown of the requested architecture:
+
+1. **Client-Side Core**: 100% browser-based Markdown stripping.
+2. **Key Benefits**:
+   - Zero latency processing
+   - Complete data privacy (*no server uploads*)
+   - Direct export to **Word (.docx)** and **Plain Text (.txt)**
+
+> For more details, visit [MarkDown Stripper](https://markdown-stripper.site).`);
+        } else if (sampleParam.toLowerCase() === 'readme') {
+          setMarkdown(`# Project Title
+
+A lightweight web application built with **React** and **Tailwind CSS**.
+
+## Features
+- [x] High-performance conversion
+- [x] Instant clipboard copying
+- [ ] Export to PDF
+
+### Contact
+Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](https://github.com).`);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse URL params:', e);
+    }
+
     // Invisible background telemetry
     trackEvent('page_view', {
       referrer: document.referrer,

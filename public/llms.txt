@@ -1,0 +1,32 @@
+# MarkDown Stripper (https://markdown-stripper.site)
+
+> Free, zero-latency online Markdown to plain-text converter and document export utility. 100% client-side privacy.
+
+## Overview
+MarkDown Stripper converts GitHub Flavored Markdown (GFM), CommonMark, LLM outputs (ChatGPT, Claude, Gemini, DeepSeek), and technical documentation into clean, unformatted plain text or formatted Microsoft Word (.docx) files in real time.
+
+## Key Capabilities & Features
+- **Zero-Latency Real-Time Stripping**: Client-side parsing instantly strips headings, bold/italics, code fences, blockquotes, tables, and raw markup.
+- **Privacy & Security Guarantee**: 100% browser-based conversion. No text, confidential documents, or credentials are ever sent to or stored on remote servers.
+- **Multi-Format Export**: One-click clipboard copy, plain text (`.txt`) download, and Microsoft Word (`.docx`) synthesis.
+- **Deep Asset Extraction**: Automatically catalogues embedded hyperlinks, images (`![alt](url)`), and email addresses into an interactive panel.
+- **AI Grammar Polish**: Optional AI-assisted grammar and spelling correction while preserving Markdown syntax structure.
+- **Drag & Drop**: Native file input support for `.md` and `.txt` files.
+- **URL Parameter Sharing**: Supports pre-filling text via URL query parameters (`?text=...` or `?sample=chatgpt`).
+
+## Syntax Handled
+- Headings: `# H1` through `###### H6` -> plain title text
+- Emphasis: `**bold**`, `__bold__`, `*italic*`, `_italic_`, `~~strikethrough~~` -> plain text
+- Links & Media: `[Anchor](https://...)` -> `Anchor` (URL extracted to Assets panel)
+- Code blocks: Backtick fences and inline code -> clean text
+- Blockquotes: `> quote` -> clean paragraph
+- Lists: Ordered, unordered, and GitHub task checkboxes (`- [x]`) -> formatted lines
+- HTML tags: Inline tags stripped cleanly
+
+## Web Links
+- Website: https://markdown-stripper.site/
+- Sitemap: https://markdown-stripper.site/sitemap.xml
+- Robots: https://markdown-stripper.site/robots.txt
+- Use Cases: https://markdown-stripper.site/#use-cases
+- Syntax Reference: https://markdown-stripper.site/#syntax-reference
+- FAQ: https://markdown-stripper.site/#faq

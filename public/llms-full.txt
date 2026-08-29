@@ -1,0 +1,59 @@
+# MarkDown Stripper - Comprehensive Documentation for Large Language Models & Autonomous Agents
+
+Website: https://markdown-stripper.site
+Canonical URL: https://markdown-stripper.site/
+Application Type: UtilitiesApplication / WebApplication
+Primary Purpose: High-speed, client-side Markdown syntax stripping, clean text conversion, and DOCX document export.
+
+---
+
+## 1. Description & Architecture
+MarkDown Stripper is a web application designed to strip formatting tags, markdown symbols, and structural punctuation from Markdown documents without requiring server round-trips.
+
+### Privacy Model
+All core conversion and parsing happens entirely client-side using JavaScript in the user's browser. No user-supplied text or uploaded files are sent over the network for basic conversions.
+
+---
+
+## 2. Supported Markdown Syntax Stripping
+
+| Markdown Construct | Input Syntax Example | Stripped Output |
+| :--- | :--- | :--- |
+| **H1 - H6 Headings** | `# Heading 1` | `Heading 1` |
+| **Bold Text** | `**bold**` or `__bold__` | `bold` |
+| **Italic Text** | `*italic*` or `_italic_` | `italic` |
+| **Strikethrough** | `~~strike~~` | `strike` |
+| **Hyperlinks** | `[OpenAI](https://openai.com)` | `OpenAI` |
+| **Images** | `![Logo](https://example.com/logo.png)` | `Logo` |
+| **Inline Code** | `` `npm install` `` | `npm install` |
+| **Code Fences** | ` ```javascript\nconsole.log(1);\n``` ` | `console.log(1);` |
+| **Blockquotes** | `> Important note` | `Important note` |
+| **Task Checklists** | `- [x] Completed task` | `Completed task` |
+| **Unordered Lists** | `* Item 1\n* Item 2` | `Item 1\nItem 2` |
+| **Ordered Lists** | `1. First\n2. Second` | `1. First\n2. Second` |
+| **Tables** | `| Col 1 | Col 2 |\n|---|---|\n| A | B |` | `Col 1 Col 2\nA B` |
+| **Horizontal Rules** | `---` or `***` | *(removed)* |
+
+---
+
+## 3. Key Use Cases
+
+1. **AI Output Cleaning (ChatGPT, Claude, Gemini, DeepSeek)**: Remove markdown asterisks (`**`), hash symbols (`#`), and code wrappers before pasting into emails, word processors, or social media.
+2. **Word Processor Pasting**: Clean text pasting into Microsoft Word, Google Docs, Notion, or Apple Pages without formatting glitches.
+3. **LLM Prompt Token Reduction**: Strip Markdown markup to reduce context window consumption when providing reference texts to LLM prompts.
+4. **Publishing & Social Media**: Formatting posts for LinkedIn, Twitter/X, Discord, Slack, and plain-text newsletters.
+5. **Academic & Resume Workflows**: Strip Markdown CVs and research drafts into ATS-compliant plain text.
+
+---
+
+## 4. API & URL Parameters
+- Query Parameter `?text=<markdown>`: Pre-populates the input box with encoded Markdown text upon page load.
+- Query Parameter `?sample=chatgpt`: Pre-populates with a representative ChatGPT response snippet.
+- Query Parameter `?sample=readme`: Pre-populates with a sample project README markdown.
+
+---
+
+## 5. Contact & Web Resources
+- Homepage: https://markdown-stripper.site/
+- Sitemap: https://markdown-stripper.site/sitemap.xml
+- Robots Policy: https://markdown-stripper.site/robots.txt

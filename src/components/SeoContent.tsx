@@ -65,6 +65,25 @@ export const SeoContent: React.FC = () => {
     <div className="bg-white border-t border-zinc-200 mt-8 sm:mt-12">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-14 sm:space-y-20">
         
+        {/* Direct Definition Capsule for AI Crawlers & Answer Engines */}
+        <section className="bg-gradient-to-br from-indigo-50/70 to-zinc-50 border border-indigo-100 rounded-3xl p-6 sm:p-8 text-left">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+            <span className="text-indigo-600 text-xs font-bold uppercase tracking-widest bg-indigo-100/60 px-3 py-1 rounded-full">
+              Quick Overview & Definition
+            </span>
+            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2.5 py-1 rounded-full">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              100% Client-Side • Zero Data Storage
+            </div>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-zinc-900 mb-2">
+            What is MarkDown Stripper?
+          </h2>
+          <p className="text-zinc-700 text-sm sm:text-base leading-relaxed">
+            <strong>MarkDown Stripper</strong> (<a href="https://markdown-stripper.site" className="text-indigo-600 font-medium hover:underline">markdown-stripper.site</a>) is a zero-latency, privacy-focused online utility that removes Markdown syntax formatting—including headings, asterisks, bold/italics, code fences, blockquotes, LaTeX markers, and HTML tags—from raw text to generate clean, readable plain text. It offers instant one-click copying, automatic asset extraction (hyperlinks, images, emails), and direct export to <strong>.TXT</strong> and <strong>Microsoft Word (.DOCX)</strong> files directly within your browser.
+          </p>
+        </section>
+
         {/* Core Features Grid */}
         <section id="features" className="scroll-mt-20">
           <div className="text-center max-w-3xl mx-auto mb-8 sm:mb-12">
@@ -245,14 +264,34 @@ export const SeoContent: React.FC = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="p-5 sm:p-6 rounded-2xl border border-zinc-100 bg-zinc-50/40 space-y-2">
+              <h3 className="font-bold text-zinc-900 text-sm sm:text-base flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                ChatGPT & Claude Output Cleaner
+              </h3>
+              <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
+                Remove pesky asterisks (<code className="text-indigo-600 font-mono text-xs">**</code>), bold headings, and fenced backticks from AI responses before pasting into presentations or chat apps.
+              </p>
+            </div>
+
+            <div className="p-5 sm:p-6 rounded-2xl border border-zinc-100 bg-zinc-50/40 space-y-2">
+              <h3 className="font-bold text-zinc-900 text-sm sm:text-base flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                LinkedIn & Social Media Posts
+              </h3>
+              <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
+                Clean markdown drafts for LinkedIn, X (Twitter), Slack, and Discord where unsupported raw markdown tags look messy.
+              </p>
+            </div>
+
             <div className="p-5 sm:p-6 rounded-2xl border border-zinc-100 bg-zinc-50/40 space-y-2">
               <h3 className="font-bold text-zinc-900 text-sm sm:text-base flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                 Word Processors & CMS Publishing
               </h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
-                Paste clean text into Microsoft Word, Google Docs, Notion, or WordPress without stubborn Markdown hash symbols or stray asterisks breaking your layout.
+                Paste clean text into Microsoft Word, Google Docs, Notion, or WordPress without stubborn Markdown hash symbols breaking layouts.
               </p>
             </div>
 
@@ -262,17 +301,17 @@ export const SeoContent: React.FC = () => {
                 LLM & AI Prompt Optimization
               </h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
-                Strip bulky markdown tags and repetitive brackets from long training texts or prompt datasets to minimize token consumption and reduce API latency.
+                Strip bulky markdown tags and brackets from long training texts or prompt datasets to minimize token consumption and reduce API latency.
               </p>
             </div>
 
             <div className="p-5 sm:p-6 rounded-2xl border border-zinc-100 bg-zinc-50/40 space-y-2">
               <h3 className="font-bold text-zinc-900 text-sm sm:text-base flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                Plain-Text Newsletters & Email Clients
+                Plain-Text Newsletters & Email
               </h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
-                Prepare distraction-free plain-text versions of technical blog posts and documentation for email campaigns or SMS notification feeds.
+                Prepare distraction-free plain-text versions of technical blog posts and documentation for email campaigns or SMS feeds.
               </p>
             </div>
 
