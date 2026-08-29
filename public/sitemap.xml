@@ -16,7 +16,7 @@
     <image:image>
       <image:loc>https://markdown-stripper.site/og-image.svg</image:loc>
       <image:title>MarkDown Stripper - Free Online Markdown to Plain Text Converter</image:title>
-      <image:caption>Instant browser-based Markdown stripping tool with DOCX export and zero latency</image:caption>
+      <image:caption>Fast browser-based Markdown and document converter with private OCR, PII scanning, semantic insights, and DOCX export</image:caption>
     </image:image>
     <image:image>
       <image:loc>https://markdown-stripper.site/favicon.svg</image:loc>
@@ -25,4 +25,3 @@
   </url>
 
 </urlset>
-

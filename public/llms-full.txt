@@ -3,15 +3,22 @@
 Website: https://markdown-stripper.site
 Canonical URL: https://markdown-stripper.site/
 Application Type: UtilitiesApplication / WebApplication
-Primary Purpose: High-speed, client-side Markdown syntax stripping, clean text conversion, and DOCX document export.
+Primary Purpose: High-speed, client-side Markdown syntax stripping, clean text conversion, local OCR, privacy review, semantic insights, and DOCX document export.
 
 ---
 
 ## 1. Description & Architecture
-MarkDown Stripper is a web application designed to strip formatting tags, markdown symbols, and structural punctuation from Markdown documents without requiring server round-trips.
+MarkDown Stripper is a web application designed to strip formatting tags, markdown symbols, and structural punctuation from Markdown documents without requiring server round-trips. It also supports local OCR for scans, optional PII review, and optional semantic duplicate insights.
 
 ### Privacy Model
-All core conversion and parsing happens entirely client-side using JavaScript in the user's browser. No user-supplied text or uploaded files are sent over the network for basic conversions.
+All conversion and parsing happens client-side using JavaScript in the user's browser. No user-supplied text or uploaded files are sent to the usage-measurement endpoint. OCR, PII scanning, and semantic analysis are browser-only when enabled; aggregate usage events contain no document content, filenames, session IDs, or device profiles.
+
+### Local document intelligence
+- Markdown, TXT, HTML, DOCX, PDF, PNG, JPG, JPEG, WEBP, BMP, and GIF files can be imported locally.
+- Scanned PDF pages and images can be OCR processed in the browser with page progress, confidence warnings, automatic language suggestions, and a manual language selector.
+- The instant privacy scan uses deterministic checks for credentials, contact patterns, hidden content, encoded payloads, and possible prompt injection.
+- An optional local English PII model adds contextual findings for names, addresses, identity information, financial data, and health information. Findings are reviewable before redaction.
+- Optional semantic insights compare substantial paragraphs locally and show likely repeated passages with similarity scores. They never silently rewrite text.
 
 ---
 

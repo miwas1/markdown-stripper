@@ -1,7 +1,7 @@
 {
   "name": "MarkDown Stripper - Markdown to Plain Text Converter",
   "short_name": "MD Stripper",
-  "description": "Convert Markdown text into clean, plain text with one click. Features live preview, instant copy, DOCX/TXT export, asset extraction, and AI grammar polish.",
+  "description": "Convert Markdown and documents into clean text with private OCR, PII scanning, semantic insights, reference extraction, and fast TXT/DOCX export.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

@@ -8,32 +8,32 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "node --import tsx --test src/lib/document/document.test.ts functions/api/usage.test.ts"
   },
   "dependencies": {
-    "@google/genai": "^2.0.1",
+    "@huggingface/transformers": "^3.8.1",
     "@tailwindcss/vite": "^4.3.0",
-    "@vitejs/plugin-react": "^6.0.1",
+    "@vitejs/plugin-react": "5.1.4",
     "docx": "^9.6.1",
-    "dotenv": "^17.2.3",
-    "express": "^4.21.2",
     "file-saver": "^2.0.5",
-    "firebase": "^12.18.0",
+    "franc-min": "^6.2.0",
     "lucide-react": "^1.14.0",
+    "mammoth": "^1.10.0",
     "motion": "^12.38.0",
+    "pdfjs-dist": "^5.4.624",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "recharts": "^3.10.1",
-    "remove-markdown": "^0.6.3"
+    "tesseract.js": "^6.0.1"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
+    "@cloudflare/workers-types": "5.20260829.1",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^8.0.12"
+    "vite": "7.3.6"
   },
   "optionalDependencies": {
     "@tailwindcss/oxide-android-arm64": "^4.3.0",

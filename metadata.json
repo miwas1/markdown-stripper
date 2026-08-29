@@ -1,8 +1,6 @@
 {
   "name": "MarkDown Stripper",
-  "description": "Convert Markdown text into clean, plain text with one click. Features live preview, instant copy, DOCX/TXT export, asset extraction, and AI grammar polish.",
+  "description": "Convert Markdown and documents into plain, readable, or AI-ready text with local OCR, privacy scanning, semantic insights, reference resolution, and fast export.",
   "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "majorCapabilities": []
 }

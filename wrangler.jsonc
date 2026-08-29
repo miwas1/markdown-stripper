@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "markdown-stripper",
+  "compatibility_date": "2026-08-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "pages_build_output_dir": "./dist",
+  "analytics_engine_datasets": [
+    {
+      "binding": "USAGE_ANALYTICS",
+      "dataset": "markdown_stripper_usage"
+    }
+  ]
+}

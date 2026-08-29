@@ -1,17 +1,22 @@
 # MarkDown Stripper (https://markdown-stripper.site)
 
-> Free, zero-latency online Markdown to plain-text converter and document export utility. 100% client-side privacy.
+> Free, fast browser Markdown/document converter with local privacy-first processing.
 
 ## Overview
 MarkDown Stripper converts GitHub Flavored Markdown (GFM), CommonMark, LLM outputs (ChatGPT, Claude, Gemini, DeepSeek), and technical documentation into clean, unformatted plain text or formatted Microsoft Word (.docx) files in real time.
 
 ## Key Capabilities & Features
 - **Zero-Latency Real-Time Stripping**: Client-side parsing instantly strips headings, bold/italics, code fences, blockquotes, tables, and raw markup.
-- **Privacy & Security Guarantee**: 100% browser-based conversion. No text, confidential documents, or credentials are ever sent to or stored on remote servers.
+- **Privacy & Security**: Conversion, import, OCR, safety scanning, and semantic review run in the browser. Aggregate usage measurements contain no document content, filenames, session IDs, or device profiles.
 - **Multi-Format Export**: One-click clipboard copy, plain text (`.txt`) download, and Microsoft Word (`.docx`) synthesis.
 - **Deep Asset Extraction**: Automatically catalogues embedded hyperlinks, images (`![alt](url)`), and email addresses into an interactive panel.
-- **AI Grammar Polish**: Optional AI-assisted grammar and spelling correction while preserving Markdown syntax structure.
-- **Drag & Drop**: Native file input support for `.md` and `.txt` files.
+- **Purpose-Aware Modes**: Plain, Readable, and AI-ready output from one fast local conversion pipeline.
+- **Reference Resolution**: Resolves inline and reference-style links, reports broken definitions, and arranges sources at the bottom.
+- **Safety & Privacy Scan**: Instantly flags exact secrets, personal data, invisible text, hidden comments, and possible prompt injection. An optional browser-only English PII model adds a deeper contextual scan without uploading the document.
+- **Document Import**: Local Markdown, TXT, HTML, DOCX, PDF, PNG, JPG, JPEG, WEBP, BMP, and GIF extraction with lazy-loaded parsers.
+- **Private OCR**: Scanned PDF pages and images can be converted to selectable text locally with language suggestions, page progress, and confidence warnings.
+- **Semantic Insights**: Optional local embeddings compare substantial paragraphs and surface likely repetition without rewriting text.
+- **Drag & Drop**: Native file input and drag-and-drop support for Markdown, documents, and images.
 - **URL Parameter Sharing**: Supports pre-filling text via URL query parameters (`?text=...` or `?sample=chatgpt`).
 
 ## Syntax Handled

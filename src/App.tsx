@@ -1,22 +1,44 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import removeMarkdown from 'remove-markdown';
+import React, { useState, useCallback, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import { 
   Copy, Check, Trash2, FileText, ArrowRightLeft, Type, 
   Upload, Download, ExternalLink, Mail, Image as ImageIcon,
   PanelRightClose, PanelRightOpen, X, Link as LinkIcon,
-  Wand2, Sparkles, FileOutput, Loader2, AlertCircle, Menu, Eye, Edit3, Columns
+  Wand2, Sparkles, FileOutput, Loader2, AlertCircle, Menu, Eye, Edit3, Columns,
+  ShieldCheck, BookOpen, Bot, AlignLeft, CheckSquare, ScanSearch, Lock, Square, Search, Languages
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI, Type as GeminiType } from "@google/genai";
-import { Document, Packer, Paragraph, TextRun } from 'docx';
-import { saveAs } from 'file-saver';
 import { SeoContent } from './components/SeoContent';
 import { SeoFooter } from './components/SeoFooter';
-import { AdminDashboard } from './components/AdminDashboard';
-import { trackEvent } from './lib/analytics';
-
-// Initialize Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+import { sizeBucket, trackEvent } from './lib/analytics';
+import { convertDocument } from './lib/document/converter';
+import { importDocument } from './lib/document/importer';
+import { redactFindings, scanDocument } from './lib/document/scanner';
+import {
+  mergeSafetyFindings,
+  modelEntitiesToFindings,
+  PII_MODEL_DOWNLOAD_MB,
+  type DeepScanRuntime,
+  type DeepScanStatus,
+  type DeepScanWorkerMessage,
+} from './lib/document/pii';
+import {
+  createPdfPageRenderer,
+  imageFileToOcrImage,
+  ocrPageNumbers,
+  type OcrRecognitionResult,
+  type OcrWorkerMessage,
+} from './lib/document/ocr';
+import { OCR_LANGUAGES, type OcrLanguageCode } from './lib/document/language-options';
+import {
+  formatSemanticScore,
+  SEMANTIC_MODEL_DOWNLOAD_MB,
+  type SemanticMatch,
+  type SemanticRuntime,
+  type SemanticStatus,
+  type SemanticWorkerMessage,
+} from './lib/document/semantic';
+import type { ConversionMode, SafetyFinding } from './lib/document/types';
+import type { OcrSource } from './lib/document/types';
 
 interface ExtractedAsset {
   type: 'link' | 'email' | 'image';
@@ -24,32 +46,72 @@ interface ExtractedAsset {
   label?: string;
 }
 
-interface GrammarCorrection {
-  original: string;
-  fixed: string;
-  reason: string;
-}
-
-interface GrammarResponse {
-  fixedMarkdown: string;
-  corrections: GrammarCorrection[];
-}
+const CONVERSION_MODES: Array<{ id: ConversionMode; label: string; description: string }> = [
+  { id: 'plain', label: 'Plain', description: 'Maximum cleanup' },
+  { id: 'readable', label: 'Readable', description: 'Preserve useful structure' },
+  { id: 'ai', label: 'AI-ready', description: 'Safe structured context' },
+];
 
 export default function App() {
   const [markdown, setMarkdown] = useState<string>('');
-  const [plainText, setPlainText] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [showAssets, setShowAssets] = useState(false);
-  const [isFixing, setIsFixing] = useState(false);
-  const [grammarCorrections, setGrammarCorrections] = useState<GrammarCorrection[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'both' | 'input' | 'output'>('both');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isAdminView, setIsAdminView] = useState(() => {
-    return window.location.hash === '#admin' || window.location.pathname.startsWith('/admin');
-  });
+  const [conversionMode, setConversionMode] = useState<ConversionMode>('readable');
+  const [appendReferences, setAppendReferences] = useState(true);
+  const [selectedFindingIds, setSelectedFindingIds] = useState<Set<string>>(new Set());
+  const [isImporting, setIsImporting] = useState(false);
+  const [importedFileName, setImportedFileName] = useState<string | null>(null);
+  const [importWarnings, setImportWarnings] = useState<string[]>([]);
+  const [deepScanFindings, setDeepScanFindings] = useState<SafetyFinding[]>([]);
+  const [deepScanStatus, setDeepScanStatus] = useState<DeepScanStatus>('idle');
+  const [deepScanProgress, setDeepScanProgress] = useState<number | null>(null);
+  const [deepScanError, setDeepScanError] = useState<string | null>(null);
+  const [deepScanRuntime, setDeepScanRuntime] = useState<DeepScanRuntime | null>(null);
+  const [deepModelReady, setDeepModelReady] = useState(false);
+  const [ocrSource, setOcrSource] = useState<OcrSource | null>(null);
+  const [ocrStatus, setOcrStatus] = useState<'idle' | 'available' | 'running' | 'complete' | 'error'>('idle');
+  const [ocrProgress, setOcrProgress] = useState<number | null>(null);
+  const [ocrLanguage, setOcrLanguage] = useState<OcrLanguageCode>('eng');
+  const [ocrDetectedLanguage, setOcrDetectedLanguage] = useState<string | null>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const [ocrCompletedPages, setOcrCompletedPages] = useState(0);
+  const [ocrTotalPages, setOcrTotalPages] = useState(0);
+  const [ocrMessage, setOcrMessage] = useState<string | null>(null);
+  const [semanticMatches, setSemanticMatches] = useState<SemanticMatch[]>([]);
+  const [semanticSegmentCount, setSemanticSegmentCount] = useState(0);
+  const [semanticStatus, setSemanticStatus] = useState<SemanticStatus>('idle');
+  const [semanticProgress, setSemanticProgress] = useState<number | null>(null);
+  const [semanticError, setSemanticError] = useState<string | null>(null);
+  const [semanticRuntime, setSemanticRuntime] = useState<SemanticRuntime | null>(null);
+  const [semanticModelReady, setSemanticModelReady] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const deepWorkerRef = useRef<Worker | null>(null);
+  const deepRequestIdRef = useRef(0);
+  const deepSourceRef = useRef<{ requestId: number; text: string } | null>(null);
+  const lastDeepScannedTextRef = useRef<string | null>(null);
+  const markdownRef = useRef(markdown);
+  const ocrWorkerRef = useRef<Worker | null>(null);
+  const ocrRequestIdRef = useRef(0);
+  const ocrResolversRef = useRef(new Map<number, { resolve: (result: OcrRecognitionResult) => void; reject: (error: Error) => void }>());
+  const semanticWorkerRef = useRef<Worker | null>(null);
+  const semanticRequestIdRef = useRef(0);
+  const semanticSourceRef = useRef<{ requestId: number; text: string } | null>(null);
+  const lastSemanticTextRef = useRef<string | null>(null);
+  const deferredMarkdown = useDeferredValue(markdown);
+  const conversion = useMemo(
+    () => convertDocument(markdown, { mode: conversionMode, appendReferences }),
+    [markdown, conversionMode, appendReferences],
+  );
+  const plainText = conversion.text;
+  const quickSafetyFindings = useMemo(() => scanDocument(deferredMarkdown), [deferredMarkdown]);
+  const safetyFindings = useMemo(
+    () => mergeSafetyFindings(quickSafetyFindings, deepScanFindings),
+    [quickSafetyFindings, deepScanFindings],
+  );
 
   // Set document title & track page view invisibly on mount, handle query parameters
   useEffect(() => {
@@ -95,47 +157,32 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     }
 
     // Invisible background telemetry
-    trackEvent('page_view', {
-      referrer: document.referrer,
-      viewport: `${window.innerWidth}x${window.innerHeight}`
-    });
-
-    const handleHashChange = () => {
-      setIsAdminView(window.location.hash === '#admin');
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    trackEvent('page_view', {}, true);
   }, []);
 
-  // Convert markdown to plain text whenever markdown changes
+  // Debounce telemetry so conversion remains instant and typing does not cause
+  // a network write per keystroke.
   useEffect(() => {
-    try {
-      const stripped = removeMarkdown(markdown);
-      setPlainText(stripped);
-      if (stripped.trim().length > 10) {
-        trackEvent('convert_markdown', { length: stripped.length });
-      }
-    } catch (error) {
-      console.error('Conversion error:', error);
-    }
-  }, [markdown]);
+    if (plainText.trim().length <= 10) return;
+    const timer = window.setTimeout(() => {
+      trackEvent('convert_markdown', {
+        feature: 'live_editor',
+        variant: conversionMode,
+        sizeBucket: sizeBucket(plainText.length),
+        outcome: 'success',
+      }, true);
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [plainText, conversionMode]);
 
   // Extract links, images, and emails
   const assets = useMemo(() => {
-    const found: ExtractedAsset[] = [];
-    
-    // Images: ![alt](url)
-    const imageRegex = /!\[(.*?)\]\((https?:\/\/[^\s\)]+)\)/g;
+    const found: ExtractedAsset[] = conversion.references.map(reference => ({
+      type: reference.kind === 'image' ? 'image' : 'link',
+      value: reference.url,
+      label: reference.label,
+    }));
     let match;
-    while ((match = imageRegex.exec(markdown)) !== null) {
-      found.push({ type: 'image', value: match[2], label: match[1] || 'Image' });
-    }
-
-    // Links: [text](url) - excluding images
-    const linkRegex = /(?<!\!)\[(.*?)\]\((https?:\/\/[^\s\)]+)\)/g;
-    while ((match = linkRegex.exec(markdown)) !== null) {
-      found.push({ type: 'link', value: match[2], label: match[1] || match[2] });
-    }
 
     // Bare URLs (approximation)
     const bareUrlRegex = /(?<!["'\(])(https?:\/\/[^\s\)\>]+)(?![^<]*>)/g;
@@ -152,14 +199,327 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     }
 
     return found;
-  }, [markdown]);
+  }, [markdown, conversion.references]);
+
+  const cancelDeepScan = useCallback(() => {
+    deepWorkerRef.current?.terminate();
+    deepWorkerRef.current = null;
+    deepRequestIdRef.current += 1;
+    deepSourceRef.current = null;
+    setDeepScanStatus('idle');
+    setDeepScanProgress(null);
+    setDeepScanError(null);
+    setDeepModelReady(false);
+  }, []);
+
+  const getDeepWorker = useCallback(() => {
+    if (deepWorkerRef.current) return deepWorkerRef.current;
+    const worker = new Worker(new URL('./lib/document/pii.worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (event: MessageEvent<DeepScanWorkerMessage>) => {
+      const message = event.data;
+      const active = deepSourceRef.current;
+      if (!active || active.requestId !== message.requestId) return;
+
+      if (message.type === 'loading') {
+        setDeepScanStatus('loading');
+        setDeepScanRuntime(message.runtime);
+        setDeepScanProgress(message.progress ?? null);
+        return;
+      }
+      if (message.type === 'ready') {
+        setDeepModelReady(true);
+        setDeepScanRuntime(message.runtime);
+        setDeepScanStatus('scanning');
+        setDeepScanProgress(0);
+        return;
+      }
+      if (message.type === 'scanning') {
+        setDeepScanStatus('scanning');
+        setDeepScanProgress(message.progress);
+        return;
+      }
+      if (message.type === 'complete') {
+        const findings = modelEntitiesToFindings(active.text, message.entities);
+        setDeepScanFindings(findings);
+        setDeepScanRuntime(message.runtime);
+        setDeepScanStatus('complete');
+        setDeepScanProgress(100);
+        setDeepScanError(null);
+        setDeepModelReady(true);
+        lastDeepScannedTextRef.current = active.text;
+        deepSourceRef.current = null;
+        setShowAssets(true);
+        trackEvent('privacy_scan_complete', {
+          feature: 'privacy_scan',
+          sizeBucket: sizeBucket(active.text.length),
+          outcome: 'success',
+        });
+        return;
+      }
+
+      console.error('Deep privacy scan error:', message.message);
+      setDeepScanStatus('error');
+      setDeepScanProgress(null);
+      setDeepScanError('Could not run the deep local scan. Check your connection and available device memory, then retry.');
+      deepSourceRef.current = null;
+    };
+    worker.onerror = (event) => {
+      console.error('Deep privacy worker error:', event.message);
+      setDeepScanStatus('error');
+      setDeepScanProgress(null);
+      setDeepScanError('The deep local scanner is not supported on this device or ran out of memory.');
+      deepSourceRef.current = null;
+      worker.terminate();
+      deepWorkerRef.current = null;
+      setDeepModelReady(false);
+    };
+    deepWorkerRef.current = worker;
+    return worker;
+  }, []);
+
+  const getOcrWorker = useCallback(() => {
+    if (ocrWorkerRef.current) return ocrWorkerRef.current;
+    const worker = new Worker(new URL('./lib/document/ocr.worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (event: MessageEvent<OcrWorkerMessage>) => {
+      const message = event.data;
+      if (message.type === 'complete') {
+        const resolver = ocrResolversRef.current.get(message.requestId);
+        if (!resolver) return;
+        ocrResolversRef.current.delete(message.requestId);
+        resolver.resolve({ text: message.text, confidence: message.confidence });
+      } else if (message.type === 'error') {
+        const resolver = ocrResolversRef.current.get(message.requestId);
+        if (!resolver) return;
+        ocrResolversRef.current.delete(message.requestId);
+        resolver.reject(new Error(message.message));
+      } else {
+        if (message.progress !== undefined) setOcrProgress(message.progress);
+        if (message.message) setOcrMessage(message.message);
+      }
+    };
+    worker.onerror = event => {
+      const error = new Error(event.message || 'The local OCR worker stopped unexpectedly.');
+      for (const resolver of ocrResolversRef.current.values()) resolver.reject(error);
+      ocrResolversRef.current.clear();
+      worker.terminate();
+      ocrWorkerRef.current = null;
+      setOcrStatus('error');
+      setOcrError('Local OCR is not supported on this device or ran out of memory.');
+    };
+    ocrWorkerRef.current = worker;
+    return worker;
+  }, []);
+
+  const cancelOcr = useCallback(() => {
+    for (const resolver of ocrResolversRef.current.values()) resolver.reject(new Error('OCR cancelled.'));
+    ocrResolversRef.current.clear();
+    ocrWorkerRef.current?.terminate();
+    ocrWorkerRef.current = null;
+    setOcrStatus(ocrSource ? 'available' : 'idle');
+    setOcrProgress(null);
+    setOcrMessage(null);
+  }, [ocrSource]);
+
+  const recognizeOcrImage = useCallback((image: Blob, language: OcrLanguageCode): Promise<OcrRecognitionResult> => {
+    const requestId = ocrRequestIdRef.current + 1;
+    ocrRequestIdRef.current = requestId;
+    return new Promise((resolve, reject) => {
+      ocrResolversRef.current.set(requestId, { resolve, reject });
+      getOcrWorker().postMessage({
+        type: 'recognize',
+        requestId,
+        language,
+        image,
+      });
+    });
+  }, [getOcrWorker]);
+
+  const handleRunOcr = useCallback(async () => {
+    if (!ocrSource || ocrStatus === 'running') return;
+    const source = ocrSource;
+    const sourceText = markdown;
+    const pageNumbers = ocrPageNumbers(source);
+    const pageTexts = source.pageTexts ? [...source.pageTexts] : [''];
+    setOcrStatus('running');
+    setOcrError(null);
+    setOcrMessage('Preparing local OCR…');
+    setOcrProgress(0);
+    setOcrCompletedPages(0);
+    setOcrTotalPages(pageNumbers.length);
+
+    let renderer: Awaited<ReturnType<typeof createPdfPageRenderer>> | null = null;
+    try {
+      if (source.kind === 'pdf') renderer = await createPdfPageRenderer(source.file);
+      const warnings: string[] = [];
+      for (let index = 0; index < pageNumbers.length; index += 1) {
+        if (markdownRef.current !== sourceText) return;
+        const pageNumber = pageNumbers[index];
+        const image = source.kind === 'pdf'
+          ? await renderer!.render(pageNumber)
+          : await imageFileToOcrImage(source.file);
+        if (markdownRef.current !== sourceText) return;
+        const result = await recognizeOcrImage(image, ocrLanguage);
+        if (result.text) pageTexts[pageNumber - 1] = result.text;
+        if (result.confidence < 55) warnings.push(`Page ${pageNumber} OCR confidence was ${Math.round(result.confidence)}%; review its text.`);
+        setOcrCompletedPages(index + 1);
+        setOcrProgress(Math.round(((index + 1) / pageNumbers.length) * 100));
+        setOcrMessage(`Page ${index + 1} of ${pageNumbers.length} complete`);
+      }
+      if (markdownRef.current !== sourceText) return;
+      const extracted = pageTexts.filter(Boolean).join('\n\n').trim();
+      setMarkdown(extracted);
+      setImportWarnings(current => [...current.filter(warning => !/OCR confidence/.test(warning)), ...warnings]);
+      setOcrSource(null);
+      setOcrStatus('complete');
+      setOcrProgress(100);
+      setOcrMessage(`Extracted ${pageNumbers.length} page${pageNumbers.length === 1 ? '' : 's'} locally`);
+      trackEvent('ocr_complete', {
+        feature: 'ocr',
+        variant: source.kind,
+        sizeBucket: sizeBucket(source.file.size),
+        outcome: 'success',
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'OCR cancelled.') return;
+      console.error('OCR error:', error);
+      setOcrStatus('error');
+      setOcrError(error instanceof Error ? error.message : 'Local OCR failed. Try another image or PDF.');
+      setOcrProgress(null);
+      setOcrMessage(null);
+    } finally {
+      renderer?.destroy();
+    }
+  }, [markdown, ocrLanguage, ocrSource, ocrStatus, recognizeOcrImage]);
+
+  const getSemanticWorker = useCallback(() => {
+    if (semanticWorkerRef.current) return semanticWorkerRef.current;
+    const worker = new Worker(new URL('./lib/document/semantic.worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (event: MessageEvent<SemanticWorkerMessage>) => {
+      const message = event.data;
+      const active = semanticSourceRef.current;
+      if (!active || active.requestId !== message.requestId) return;
+      if (message.type === 'loading') {
+        setSemanticStatus('loading');
+        setSemanticRuntime(message.runtime);
+        setSemanticProgress(message.progress ?? null);
+      } else if (message.type === 'analyzing') {
+        setSemanticStatus('analyzing');
+        setSemanticRuntime(message.runtime);
+        setSemanticProgress(message.progress);
+      } else if (message.type === 'complete') {
+        setSemanticMatches(message.matches);
+        setSemanticSegmentCount(message.segmentCount);
+        setSemanticStatus('complete');
+        setSemanticRuntime(message.runtime);
+        setSemanticProgress(100);
+        setSemanticError(null);
+        setSemanticModelReady(true);
+        lastSemanticTextRef.current = active.text;
+        semanticSourceRef.current = null;
+        setShowAssets(true);
+        trackEvent('semantic_scan_complete', {
+          feature: 'semantic_scan',
+          sizeBucket: sizeBucket(active.text.length),
+          outcome: 'success',
+        });
+      } else {
+        console.error('Semantic analysis error:', message.message);
+        setSemanticStatus('error');
+        setSemanticProgress(null);
+        setSemanticError('Could not analyze similar passages on this device. Please retry.');
+        semanticSourceRef.current = null;
+      }
+    };
+    worker.onerror = event => {
+      console.error('Semantic worker error:', event.message);
+      setSemanticStatus('error');
+      setSemanticProgress(null);
+      setSemanticError('Semantic analysis is not supported on this device or ran out of memory.');
+      semanticSourceRef.current = null;
+      worker.terminate();
+      semanticWorkerRef.current = null;
+      setSemanticModelReady(false);
+    };
+    semanticWorkerRef.current = worker;
+    return worker;
+  }, []);
+
+  const cancelSemanticScan = useCallback(() => {
+    semanticWorkerRef.current?.terminate();
+    semanticWorkerRef.current = null;
+    semanticRequestIdRef.current += 1;
+    semanticSourceRef.current = null;
+    setSemanticStatus('idle');
+    setSemanticProgress(null);
+    setSemanticError(null);
+    setSemanticModelReady(false);
+  }, []);
+
+  const handleSemanticScan = useCallback(() => {
+    if (!markdown.trim() || semanticStatus === 'loading' || semanticStatus === 'analyzing') return;
+    const requestId = semanticRequestIdRef.current + 1;
+    semanticRequestIdRef.current = requestId;
+    semanticSourceRef.current = { requestId, text: markdown };
+    setSemanticMatches([]);
+    setSemanticStatus(semanticModelReady ? 'analyzing' : 'loading');
+    setSemanticProgress(semanticModelReady ? 0 : null);
+    setSemanticError(null);
+    setShowAssets(true);
+    getSemanticWorker().postMessage({ type: 'semantic', requestId, text: markdown });
+  }, [getSemanticWorker, markdown, semanticModelReady, semanticStatus]);
+
+  const handleDeepScan = useCallback(() => {
+    if (!markdown.trim() || deepScanStatus === 'loading' || deepScanStatus === 'scanning') return;
+    const requestId = deepRequestIdRef.current + 1;
+    deepRequestIdRef.current = requestId;
+    deepSourceRef.current = { requestId, text: markdown };
+    setDeepScanFindings([]);
+    setSelectedFindingIds(new Set());
+    setDeepScanStatus(deepModelReady ? 'scanning' : 'loading');
+    setDeepScanProgress(deepModelReady ? 0 : null);
+    setDeepScanError(null);
+    setShowAssets(true);
+    getDeepWorker().postMessage({ type: 'scan', requestId, text: markdown });
+  }, [deepModelReady, deepScanStatus, getDeepWorker, markdown]);
+
+  // A finding's offsets are only valid for the exact text that was scanned.
+  // Cancel in-flight work and discard stale model findings after an edit.
+  useEffect(() => {
+    markdownRef.current = markdown;
+    const active = deepSourceRef.current;
+    if (active && active.text !== markdown) cancelDeepScan();
+    const semanticActive = semanticSourceRef.current;
+    if (semanticActive && semanticActive.text !== markdown) cancelSemanticScan();
+    if (lastDeepScannedTextRef.current !== null && lastDeepScannedTextRef.current !== markdown) {
+      lastDeepScannedTextRef.current = null;
+      setDeepScanFindings([]);
+      setDeepScanStatus('idle');
+      setDeepScanProgress(null);
+      setDeepScanError(null);
+      setSelectedFindingIds(new Set());
+    }
+    if (lastSemanticTextRef.current !== null && lastSemanticTextRef.current !== markdown) {
+      lastSemanticTextRef.current = null;
+      setSemanticMatches([]);
+      setSemanticSegmentCount(0);
+      setSemanticStatus('idle');
+      setSemanticProgress(null);
+      setSemanticError(null);
+    }
+  }, [cancelDeepScan, cancelSemanticScan, markdown]);
+
+  useEffect(() => () => {
+    deepWorkerRef.current?.terminate();
+    semanticWorkerRef.current?.terminate();
+    ocrWorkerRef.current?.terminate();
+  }, []);
 
   const handleCopy = useCallback(async () => {
     if (!plainText) return;
     try {
       await navigator.clipboard.writeText(plainText);
       setCopied(true);
-      trackEvent('copy_text', { length: plainText.length });
+      trackEvent('copy_text', { feature: 'clipboard', sizeBucket: sizeBucket(plainText.length), outcome: 'success' });
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy!', err);
@@ -167,21 +527,44 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
   }, [plainText]);
 
   const handleClear = () => {
+    cancelDeepScan();
+    cancelOcr();
+    cancelSemanticScan();
     setMarkdown('');
-    setGrammarCorrections([]);
+    setDeepScanFindings([]);
+    lastDeepScannedTextRef.current = null;
+    setSelectedFindingIds(new Set());
+    setImportedFileName(null);
+    setImportWarnings([]);
+    setOcrSource(null);
+    setOcrStatus('idle');
+    setOcrProgress(null);
+    setOcrError(null);
+    setOcrDetectedLanguage(null);
+    setOcrCompletedPages(0);
+    setOcrTotalPages(0);
+    setOcrMessage(null);
+    setSemanticMatches([]);
+    setSemanticSegmentCount(0);
+    setSemanticStatus('idle');
+    setSemanticProgress(null);
+    setSemanticError(null);
     setError(null);
   };
 
   const handleExportText = () => {
     if (!plainText) return;
     const blob = new Blob([plainText], { type: 'text/plain' });
-    saveAs(blob, 'converted-text.txt');
-    trackEvent('export_file', { format: 'txt', length: plainText.length });
+    void import('file-saver').then(({ default: saveAs }) => saveAs(blob, 'converted-text.txt'));
+    trackEvent('export_file', { feature: 'download', variant: 'txt', sizeBucket: sizeBucket(plainText.length), outcome: 'success' });
   };
 
   const handleExportDocx = async () => {
     if (!plainText) return;
-    
+    const [{ Document, Packer, Paragraph, TextRun }, { default: saveAs }] = await Promise.all([
+      import('docx'),
+      import('file-saver'),
+    ]);
     const lines = plainText.split('\n');
     const doc = new Document({
       sections: [{
@@ -194,71 +577,49 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
 
     const blob = await Packer.toBlob(doc);
     saveAs(blob, 'converted-document.docx');
-    trackEvent('export_file', { format: 'docx', length: plainText.length });
+    trackEvent('export_file', { feature: 'download', variant: 'docx', sizeBucket: sizeBucket(plainText.length), outcome: 'success' });
   };
 
-  const handleFixGrammar = async () => {
-    if (!markdown.trim() || isFixing) return;
-    setIsFixing(true);
+  const handleFileUpload = async (file: File) => {
+    if (isImporting) return;
+    cancelOcr();
+    setIsImporting(true);
     setError(null);
+    setImportWarnings([]);
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: `Fix the grammar, spelling, and punctuation of the following Markdown text. Preserve all Markdown formatting (headings, lists, code blocks, etc.). 
-        Return the response as a JSON object with:
-        1. 'fixedMarkdown': the corrected markdown text.
-        2. 'corrections': an array of objects, each containing 'original' (the snippet that was wrong), 'fixed' (the correction), and 'reason' (explanation).
-        
-        Markdown to fix:
-        ${markdown}`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: GeminiType.OBJECT,
-            properties: {
-              fixedMarkdown: { type: GeminiType.STRING },
-              corrections: {
-                type: GeminiType.ARRAY,
-                items: {
-                  type: GeminiType.OBJECT,
-                  properties: {
-                    original: { type: GeminiType.STRING },
-                    fixed: { type: GeminiType.STRING },
-                    reason: { type: GeminiType.STRING },
-                  },
-                  required: ['original', 'fixed', 'reason']
-                }
-              }
-            },
-            required: ['fixedMarkdown', 'corrections']
-          }
-        },
+      const imported = await importDocument(file);
+      setMarkdown(imported.text);
+      setImportedFileName(imported.fileName);
+      setImportWarnings(imported.warnings);
+      setOcrSource(imported.ocr ?? null);
+      setOcrStatus(imported.ocr ? 'available' : 'idle');
+      setOcrProgress(null);
+      setOcrError(null);
+      setOcrCompletedPages(0);
+      setOcrTotalPages(imported.ocr?.pageNumbers?.length ?? 0);
+      setOcrMessage(null);
+      const { detectOcrLanguage } = await import('./lib/document/language');
+      const language = detectOcrLanguage(imported.text);
+      setOcrDetectedLanguage(imported.ocr
+        ? `${language.detected ? 'Suggested' : 'Default'} ${language.label} · ${language.confidence} confidence`
+        : null);
+      setOcrLanguage(language.code);
+      setSemanticMatches([]);
+      setSemanticSegmentCount(0);
+      setSemanticStatus('idle');
+      setSelectedFindingIds(new Set());
+      trackEvent('document_import', {
+        feature: 'import',
+        variant: imported.format,
+        sizeBucket: sizeBucket(file.size),
+        outcome: 'success',
       });
-
-      const result = JSON.parse(response.text) as GrammarResponse;
-      setMarkdown(result.fixedMarkdown);
-      setGrammarCorrections(result.corrections);
-      setShowAssets(true);
-      trackEvent('ai_grammar_fix', { count: result.corrections.length });
     } catch (err) {
-      console.error('AI Error:', err);
-      setError('Failed to process grammar fix. Please try again.');
+      console.error('Import error:', err);
+      setError(err instanceof Error ? err.message : 'Could not import this document.');
     } finally {
-      setIsFixing(false);
-    }
-  };
-
-  const handleFileUpload = (file: File) => {
-    if (file.type === 'text/markdown' || file.name.endsWith('.md') || file.name.endsWith('.txt')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result;
-        if (typeof text === 'string') {
-          setMarkdown(text);
-          setGrammarCorrections([]);
-        }
-      };
-      reader.readAsText(file);
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -266,7 +627,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file) handleFileUpload(file);
+    if (file) void handleFileUpload(file);
   };
 
   const onDragOver = (e: React.DragEvent) => {
@@ -281,11 +642,11 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
   const insertSample = () => {
     setMarkdown(`# Sample Markdown Document
     
-This text has some bad grammer and misspellings heere. Gemini AI will fix it!
+This sample exercises common Markdown syntax and local document insights.
 
 ## Extractor Demo
 - Email: contact@example.com
-- Link: [Visit AI Studio](https://ai.studio)
+- Link: [Visit the project](https://markdown-stripper.site)
 - Image: ![Logo](https://raw.githubusercontent.com/lucide-react/lucide/main/icons/file-text.svg)
 
 ## Lists & Highlights
@@ -297,19 +658,44 @@ This text has some bad grammer and misspellings heere. Gemini AI will fix it!
 > "Markdown is a lightweight markup language designed for formatting readability."
 
 \`\`\`javascript
-const stripMarkdown = (text) => removeMarkdown(text);
+const result = convertDocument(text, { mode: 'readable' });
 \`\`\`
 `);
   };
 
-  const totalAssetsCount = assets.length + grammarCorrections.length;
+  const toggleFinding = (id: string) => {
+    setSelectedFindingIds(current => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
-  if (isAdminView) {
-    return <AdminDashboard onBack={() => {
-      window.location.hash = '';
-      setIsAdminView(false);
-    }} />;
-  }
+  const selectAllFindings = () => {
+    setSelectedFindingIds(new Set(safetyFindings.map(finding => finding.id)));
+  };
+
+  const handleRedactSelected = () => {
+    if (!selectedFindingIds.size) return;
+    setMarkdown(current => redactFindings(current, safetyFindings, selectedFindingIds));
+    trackEvent('redact_findings', { feature: 'redaction', outcome: 'success' });
+    setSelectedFindingIds(new Set());
+  };
+
+  const totalAssetsCount = assets.length + safetyFindings.length + conversion.brokenReferences.length;
+  const isDeepScanning = deepScanStatus === 'loading' || deepScanStatus === 'scanning';
+  const isSemanticScanning = semanticStatus === 'loading' || semanticStatus === 'analyzing';
+  const modelFindingCount = safetyFindings.filter(finding => finding.source === 'local-ai').length;
+  const safetyStatus = deferredMarkdown !== markdown
+    ? 'Quick scan…'
+    : deepScanStatus === 'loading'
+      ? 'Loading deep scan…'
+      : deepScanStatus === 'scanning'
+        ? 'Deep scanning…'
+        : safetyFindings.length
+          ? `${safetyFindings.length} found`
+          : 'Clear';
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans selection:bg-indigo-100 flex flex-col antialiased">
@@ -337,20 +723,6 @@ const stripMarkdown = (text) => removeMarkdown(text);
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* AI Polish Button (Desktop) */}
-            <button
-              onClick={handleFixGrammar}
-              disabled={!markdown.trim() || isFixing}
-              className="hidden sm:flex items-center gap-2 text-xs sm:text-sm font-semibold bg-zinc-900 text-white hover:bg-zinc-800 px-3.5 py-2 rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed group min-h-[40px]"
-            >
-              {isFixing ? (
-                <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
-              ) : (
-                <Sparkles className="w-4 h-4 text-indigo-400 group-hover:scale-125 transition-transform" />
-              )}
-              <span>AI Grammar Fix</span>
-            </button>
-
             {/* Sample & Upload Buttons (Desktop) */}
             <div className="hidden md:flex items-center gap-1 border-l pl-2 border-zinc-200">
               <button
@@ -361,10 +733,11 @@ const stripMarkdown = (text) => removeMarkdown(text);
               </button>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-indigo-600 transition-colors px-2.5 py-2 rounded-lg hover:bg-zinc-100 min-h-[40px]"
+                disabled={isImporting}
+                className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-indigo-600 transition-colors px-2.5 py-2 rounded-lg hover:bg-zinc-100 min-h-[40px] disabled:opacity-50"
               >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Upload</span>
+                {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                <span>{isImporting ? 'Importing' : 'Upload'}</span>
               </button>
             </div>
 
@@ -395,9 +768,9 @@ const stripMarkdown = (text) => removeMarkdown(text);
             <input 
               type="file" 
               ref={fileInputRef} 
-              onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+              onChange={(e) => e.target.files?.[0] && void handleFileUpload(e.target.files[0])}
               className="hidden" 
-              accept=".md,.txt"
+              accept=".md,.markdown,.txt,.html,.htm,.docx,.pdf,.png,.jpg,.jpeg,.webp,.bmp,.gif"
             />
           </div>
         </div>
@@ -411,18 +784,7 @@ const stripMarkdown = (text) => removeMarkdown(text);
               exit={{ height: 0, opacity: 0 }}
               className="lg:hidden border-t border-zinc-100 bg-white px-4 py-4 space-y-3 shadow-lg overflow-hidden"
             >
-              <div className="grid grid-cols-2 gap-2 pb-3 border-b border-zinc-100">
-                <button
-                  onClick={() => {
-                    handleFixGrammar();
-                    setIsMobileMenuOpen(false);
-                  }}
-                  disabled={!markdown.trim() || isFixing}
-                  className="flex items-center justify-center gap-2 text-xs font-semibold bg-zinc-900 text-white p-3 rounded-xl min-h-[44px] disabled:opacity-40"
-                >
-                  {isFixing ? <Loader2 className="w-4 h-4 animate-spin text-indigo-400" /> : <Sparkles className="w-4 h-4 text-indigo-400" />}
-                  <span>AI Polish</span>
-                </button>
+              <div className="grid grid-cols-1 gap-2 pb-3 border-b border-zinc-100">
                 <button
                   onClick={() => {
                     insertSample();
@@ -438,10 +800,11 @@ const stripMarkdown = (text) => removeMarkdown(text);
                     fileInputRef.current?.click();
                     setIsMobileMenuOpen(false);
                   }}
-                  className="flex items-center justify-center gap-2 text-xs font-semibold bg-zinc-100 text-zinc-700 p-3 rounded-xl min-h-[44px] hover:bg-zinc-200 active:scale-98"
+                  disabled={isImporting}
+                  className="flex items-center justify-center gap-2 text-xs font-semibold bg-zinc-100 text-zinc-700 p-3 rounded-xl min-h-[44px] hover:bg-zinc-200 active:scale-98 disabled:opacity-50"
                 >
-                  <Upload className="w-4 h-4 text-zinc-600" />
-                  <span>Upload File</span>
+                  {isImporting ? <Loader2 className="w-4 h-4 animate-spin text-zinc-600" /> : <Upload className="w-4 h-4 text-zinc-600" />}
+                  <span>{isImporting ? 'Importing' : 'Upload File'}</span>
                 </button>
                 <button
                   onClick={() => {
@@ -502,6 +865,112 @@ const stripMarkdown = (text) => removeMarkdown(text);
       <div className="flex-1 relative">
         <main className={`transition-all duration-300 ease-in-out px-3 sm:px-6 lg:px-8 py-4 sm:py-8 ${showAssets ? 'lg:mr-96' : ''}`}>
           <div className="max-w-7xl mx-auto space-y-4">
+
+            {/* Purpose-aware conversion controls */}
+            <section className="bg-white border border-zinc-200 rounded-2xl p-2 sm:p-3 shadow-sm flex flex-col lg:flex-row lg:items-center gap-2 sm:gap-3">
+              <div className="grid grid-cols-3 gap-1.5 flex-1" role="radiogroup" aria-label="Conversion mode">
+                {CONVERSION_MODES.map(mode => {
+                  const Icon = mode.id === 'plain' ? AlignLeft : mode.id === 'readable' ? BookOpen : Bot;
+                  const active = conversionMode === mode.id;
+                  return (
+                    <button
+                      key={mode.id}
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setConversionMode(mode.id)}
+                      className={`min-h-[48px] sm:min-h-[54px] rounded-xl px-2 sm:px-4 flex items-center justify-center sm:justify-start gap-2.5 transition-all ${
+                        active
+                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100'
+                          : 'bg-zinc-50 text-zinc-600 hover:bg-zinc-100'
+                      }`}
+                    >
+                      <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-white' : 'text-indigo-600'}`} />
+                      <span className="text-left">
+                        <span className="block text-xs sm:text-sm font-bold">{mode.label}</span>
+                        <span className={`hidden sm:block text-[10px] mt-0.5 ${active ? 'text-indigo-100' : 'text-zinc-400'}`}>
+                          {mode.description}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={appendReferences}
+                onClick={() => setAppendReferences(value => !value)}
+                className={`min-h-[44px] px-3.5 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold transition-colors ${
+                  appendReferences ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-50 text-zinc-500'
+                }`}
+              >
+                <CheckSquare className="w-4 h-4" />
+                References at bottom
+                {conversion.references.length > 0 && (
+                  <span className="bg-white/80 px-1.5 py-0.5 rounded-full text-[10px]">{conversion.references.length}</span>
+                )}
+              </button>
+            </section>
+
+            {(importedFileName || importWarnings.length > 0) && (
+              <div className="bg-sky-50 border border-sky-100 rounded-xl px-3.5 py-2.5 text-xs text-sky-800 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+                {importedFileName && <span className="font-bold truncate">Imported: {importedFileName}</span>}
+                {importWarnings.length > 0 && <span className="text-sky-700">{importWarnings.join(' ')}</span>}
+              </div>
+            )}
+
+            {ocrSource && (
+              <section className="rounded-2xl border border-amber-200 bg-amber-50/70 px-3.5 py-3 sm:px-4 flex flex-col md:flex-row md:items-center gap-3" aria-live="polite">
+                <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-white border border-amber-200 text-amber-700 flex items-center justify-center shrink-0">
+                    <ScanSearch className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-amber-950">
+                      {ocrSource.kind === 'pdf'
+                        ? `${ocrSource.pageNumbers?.length ?? 0} scanned PDF page${(ocrSource.pageNumbers?.length ?? 0) === 1 ? '' : 's'} ready for OCR`
+                        : 'Image ready for local OCR'}
+                    </p>
+                    <p className="text-[10px] text-amber-800/80 mt-0.5">
+                      Extract printed text on this device. Nothing from the document is uploaded.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap md:justify-end">
+                  <label className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-amber-900">
+                    <Languages className="w-3.5 h-3.5" />
+                    <span className="sr-only">OCR language</span>
+                    <select
+                      value={ocrLanguage}
+                      onChange={event => setOcrLanguage(event.target.value as OcrLanguageCode)}
+                      disabled={ocrStatus === 'running'}
+                      className="bg-white border border-amber-200 rounded-lg px-2 py-1.5 text-[10px] font-semibold text-zinc-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    >
+                      {OCR_LANGUAGES.map(language => <option key={language.code} value={language.code}>{language.label}</option>)}
+                    </select>
+                  </label>
+                  {ocrDetectedLanguage && <span className="text-[10px] text-amber-800">{ocrDetectedLanguage}</span>}
+                  {ocrStatus === 'running' ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-amber-800 max-w-[150px] truncate">{ocrMessage ?? `Reading ${ocrCompletedPages}/${ocrTotalPages}`}</span>
+                      <button onClick={cancelOcr} className="min-h-[36px] px-3 rounded-lg bg-white border border-amber-200 text-amber-900 text-[10px] font-bold hover:bg-amber-100">
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={handleRunOcr} className="min-h-[36px] px-3.5 rounded-lg bg-amber-600 text-white text-[10px] font-bold hover:bg-amber-700 active:scale-[0.99]">
+                      {ocrStatus === 'error' ? 'Retry OCR' : 'Extract text locally'}
+                    </button>
+                  )}
+                </div>
+                {ocrStatus === 'running' && (
+                  <div className="w-full md:w-24 h-1.5 rounded-full bg-white border border-amber-200 overflow-hidden">
+                    <div className="h-full rounded-full bg-amber-500 transition-[width] duration-300" style={{ width: `${ocrProgress ?? 4}%` }} />
+                  </div>
+                )}
+                {ocrStatus === 'error' && <p className="text-[10px] text-red-700 w-full">{ocrError}</p>}
+              </section>
+            )}
             
             {/* Mobile View Switcher (Visible on small & medium screens < lg) */}
             <div className="lg:hidden flex items-center justify-between bg-zinc-200/70 p-1 rounded-xl gap-1 text-xs font-semibold text-zinc-600">
@@ -538,14 +1007,6 @@ const stripMarkdown = (text) => removeMarkdown(text);
             <div className="flex sm:hidden items-center justify-between gap-2 overflow-x-auto pb-1 scrollbar-none">
               <div className="flex items-center gap-1.5">
                 <button
-                  onClick={handleFixGrammar}
-                  disabled={!markdown.trim() || isFixing}
-                  className="flex items-center gap-1.5 text-xs font-semibold bg-zinc-900 text-white px-3 py-2 rounded-xl min-h-[40px] disabled:opacity-40 active:scale-95 whitespace-nowrap"
-                >
-                  {isFixing ? <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" /> : <Sparkles className="w-3.5 h-3.5 text-indigo-400" />}
-                  <span>AI Fix</span>
-                </button>
-                <button
                   onClick={insertSample}
                   className="text-xs font-semibold bg-white border border-zinc-200 text-zinc-700 px-3 py-2 rounded-xl min-h-[40px] hover:bg-zinc-50 active:scale-95 whitespace-nowrap"
                 >
@@ -553,10 +1014,11 @@ const stripMarkdown = (text) => removeMarkdown(text);
                 </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1 text-xs font-semibold bg-white border border-zinc-200 text-zinc-700 px-3 py-2 rounded-xl min-h-[40px] hover:bg-zinc-50 active:scale-95 whitespace-nowrap"
+                  disabled={isImporting}
+                  className="flex items-center gap-1 text-xs font-semibold bg-white border border-zinc-200 text-zinc-700 px-3 py-2 rounded-xl min-h-[40px] hover:bg-zinc-50 active:scale-95 whitespace-nowrap disabled:opacity-50"
                 >
-                  <Upload className="w-3.5 h-3.5 text-zinc-500" />
-                  <span>Upload</span>
+                  {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" /> : <Upload className="w-3.5 h-3.5 text-zinc-500" />}
+                  <span>{isImporting ? 'Importing' : 'Upload'}</span>
                 </button>
               </div>
 
@@ -613,7 +1075,7 @@ const stripMarkdown = (text) => removeMarkdown(text);
                 <textarea
                   value={markdown}
                   onChange={(e) => setMarkdown(e.target.value)}
-                  placeholder="Paste your markdown here or drop a file (.md, .txt)..."
+                  placeholder="Paste Markdown or drop MD, TXT, HTML, DOCX, PDF, or an image..."
                   className="flex-1 p-4 sm:p-6 resize-none focus:outline-none text-zinc-800 font-mono text-base sm:text-sm leading-relaxed placeholder:text-zinc-300 min-h-[300px] sm:min-h-[380px]"
                 />
                 
@@ -621,7 +1083,7 @@ const stripMarkdown = (text) => removeMarkdown(text);
                   <div className="absolute inset-0 bg-indigo-600/5 backdrop-blur-[1px] flex items-center justify-center pointer-events-none p-4">
                     <div className="bg-white px-6 py-4 rounded-2xl shadow-xl border border-indigo-100 flex items-center gap-3 scale-105 transition-transform">
                       <Upload className="w-6 h-6 text-indigo-600 animate-bounce" />
-                      <span className="font-semibold text-indigo-900 text-sm">Drop to Import</span>
+                      <span className="font-semibold text-indigo-900 text-sm">Drop Markdown, TXT, HTML, DOCX, PDF, or image</span>
                     </div>
                   </div>
                 )}
@@ -636,7 +1098,9 @@ const stripMarkdown = (text) => removeMarkdown(text);
                 <div className="px-3 sm:px-4 py-3 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/70">
                   <div className="flex items-center gap-2 text-zinc-700">
                     <ArrowRightLeft className="w-4 h-4 text-emerald-600" />
-                    <span className="text-xs font-bold uppercase tracking-wider">Plain Text Output</span>
+                    <span className="text-xs font-bold uppercase tracking-wider">
+                      {conversionMode === 'plain' ? 'Plain Text' : conversionMode === 'readable' ? 'Readable Text' : 'AI-ready Context'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-1 sm:gap-2">
                     <div className="flex items-center bg-zinc-100 rounded-xl p-0.5">
@@ -695,7 +1159,7 @@ const stripMarkdown = (text) => removeMarkdown(text);
           </div>
         </main>
 
-        {/* Sidebar Drawer: Assets & Grammar Insight (Fully responsive modal on mobile) */}
+        {/* Sidebar Drawer: Assets & Document Insights (Fully responsive modal on mobile) */}
         <AnimatePresence mode="wait">
           {showAssets && (
             <>
@@ -722,7 +1186,7 @@ const stripMarkdown = (text) => removeMarkdown(text);
                     </div>
                     <div>
                       <h2 className="font-bold text-zinc-900 text-base leading-tight">Insights</h2>
-                      <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest">AI & Extractor</p>
+                      <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest">Safety & Sources</p>
                     </div>
                   </div>
                   <button 
@@ -735,48 +1199,288 @@ const stripMarkdown = (text) => removeMarkdown(text);
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-6 space-y-6 scrollbar-thin scrollbar-thumb-zinc-200">
-                  {/* Grammar Corrections section */}
-                  {grammarCorrections.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                          AI Grammar Fixes
+                  {/* Local safety and privacy scan */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        Safety & Privacy
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        safetyFindings.length ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                      }`}>
+                        {safetyStatus}
+                      </span>
+                    </div>
+
+                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-3.5 space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-white border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                          {isDeepScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanSearch className="w-4 h-4" />}
                         </div>
-                        <span className="bg-indigo-50 text-indigo-600 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                          {grammarCorrections.length} Fixed
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-zinc-900">Deep local scan</span>
+                            <span className="text-[9px] uppercase font-black tracking-wide bg-white text-indigo-600 px-1.5 py-0.5 rounded-md border border-indigo-100">
+                              Optional
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-zinc-500 leading-relaxed mt-1">
+                            Finds English names, addresses and identity details that exact pattern matching can miss.
+                          </p>
+                        </div>
+                      </div>
+
+                      {isDeepScanning && (
+                        <div className="space-y-1.5" aria-live="polite">
+                          <div className="h-1.5 rounded-full bg-white overflow-hidden border border-indigo-100" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={deepScanProgress ?? undefined}>
+                            <div
+                              className={`h-full bg-indigo-600 rounded-full transition-[width] duration-300 ${deepScanProgress === null ? 'w-1/3 animate-pulse' : ''}`}
+                              style={deepScanProgress === null ? undefined : { width: `${deepScanProgress}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-2 text-[10px] text-indigo-700">
+                            <span>
+                              {deepScanStatus === 'loading'
+                                ? deepScanProgress === null ? 'Preparing private model…' : `Downloading model… ${deepScanProgress}%`
+                                : `Checking document… ${deepScanProgress ?? 0}%`}
+                            </span>
+                            <button onClick={cancelDeepScan} className="font-bold inline-flex items-center gap-1 hover:text-indigo-900 min-h-[28px] px-1">
+                              <Square className="w-2.5 h-2.5 fill-current" /> Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {deepScanStatus === 'complete' && (
+                        <div className="rounded-xl bg-white/80 border border-indigo-100 px-3 py-2 text-[10px] text-zinc-600 flex items-center justify-between gap-2">
+                          <span>
+                            <strong className="text-zinc-900">Deep scan complete.</strong>{' '}
+                            {modelFindingCount ? `${modelFindingCount} additional finding${modelFindingCount === 1 ? '' : 's'}.` : 'No additional PII found.'}
+                          </span>
+                          <button onClick={handleDeepScan} className="font-bold text-indigo-600 hover:text-indigo-800 shrink-0 min-h-[28px]">Scan again</button>
+                        </div>
+                      )}
+
+                      {deepScanStatus === 'error' && (
+                        <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2 text-[10px] text-red-700">
+                          <p>{deepScanError}</p>
+                          <button onClick={handleDeepScan} className="font-bold mt-1.5 min-h-[28px] hover:text-red-900">Retry deep scan</button>
+                        </div>
+                      )}
+
+                      {!isDeepScanning && deepScanStatus !== 'complete' && deepScanStatus !== 'error' && (
+                        <button
+                          onClick={handleDeepScan}
+                          disabled={!markdown.trim()}
+                          className="w-full min-h-[40px] rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                          {deepModelReady ? 'Run deep scan' : `Enable deep scan · ~${PII_MODEL_DOWNLOAD_MB} MB`}
+                        </button>
+                      )}
+
+                      <div className="flex items-start gap-1.5 text-[9px] text-zinc-400 leading-relaxed">
+                        <Lock className="w-3 h-3 shrink-0 mt-px text-emerald-600" />
+                        <span>
+                          Your document stays on this device. The model downloads once from Hugging Face and is cached by your browser.
+                          {deepScanRuntime && ` Using ${deepScanRuntime === 'webgpu' ? 'WebGPU acceleration' : 'compatibility mode'}.`}
                         </span>
                       </div>
-                      <div className="space-y-2.5">
-                        {grammarCorrections.map((corr, i) => (
-                          <div key={i} className="bg-zinc-50/70 border border-zinc-200/80 rounded-xl p-3.5 shadow-xs">
-                            <div className="flex flex-col gap-1.5">
-                              <div className="flex items-start gap-2">
-                                <span className="text-[9px] font-bold text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded shrink-0 mt-0.5">Before</span>
-                                <p className="text-xs text-zinc-500 line-through break-all">{corr.original}</p>
+                    </div>
+
+                    {safetyFindings.length > 0 ? (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={selectAllFindings}
+                            className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
+                          >
+                            Select all
+                          </button>
+                          {selectedFindingIds.size > 0 && (
+                            <button
+                              onClick={handleRedactSelected}
+                              disabled={deferredMarkdown !== markdown}
+                              className="ml-auto bg-zinc-900 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-wait"
+                            >
+                              Redact {selectedFindingIds.size}
+                            </button>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          {safetyFindings.map(finding => (
+                            <label
+                              key={finding.id}
+                              className={`block border rounded-xl p-3 cursor-pointer transition-colors ${
+                                selectedFindingIds.has(finding.id)
+                                  ? 'border-indigo-300 bg-indigo-50/60'
+                                  : finding.severity === 'high'
+                                    ? 'border-red-200 bg-red-50/50'
+                                    : 'border-zinc-200 bg-zinc-50/60'
+                              }`}
+                            >
+                              <div className="flex items-start gap-2.5">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedFindingIds.has(finding.id)}
+                                  onChange={() => toggleFinding(finding.id)}
+                                  className="mt-0.5 accent-indigo-600"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-zinc-900">{finding.title}</span>
+                                    <span className={`ml-auto uppercase text-[8px] font-black px-1.5 py-0.5 rounded ${
+                                      finding.severity === 'high'
+                                        ? 'bg-red-100 text-red-700'
+                                        : finding.severity === 'medium'
+                                          ? 'bg-amber-100 text-amber-700'
+                                          : 'bg-zinc-200 text-zinc-600'
+                                    }`}>
+                                      {finding.severity}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-zinc-500 mt-1">Line {finding.line} · {finding.detail}</p>
+                                  <div className="flex items-center gap-1.5 mt-1.5">
+                                    <span className={`text-[8px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                                      finding.source === 'local-ai'
+                                        ? 'bg-indigo-100 text-indigo-700'
+                                        : 'bg-zinc-200 text-zinc-600'
+                                    }`}>
+                                      {finding.source === 'local-ai' ? 'Local AI' : 'Exact match'}
+                                    </span>
+                                    {finding.confidence !== undefined && (
+                                      <span className="text-[9px] font-bold text-zinc-500">{Math.round(finding.confidence * 100)}% confidence</span>
+                                    )}
+                                  </div>
+                                  <code className="block mt-1.5 text-[10px] text-zinc-700 bg-white/80 rounded px-2 py-1 truncate">
+                                    {finding.value.replace(/\s+/g, ' ')}
+                                  </code>
+                                </div>
                               </div>
-                              <div className="flex items-start gap-2">
-                                <span className="text-[9px] font-bold text-emerald-600 uppercase bg-emerald-50 px-1.5 py-0.5 rounded shrink-0 mt-0.5">After</span>
-                                <p className="text-xs text-zinc-900 font-semibold break-all">{corr.fixed}</p>
-                              </div>
-                              <p className="text-[11px] text-zinc-500 italic pl-2 border-l-2 border-indigo-200 mt-1">
-                                {corr.reason}
-                              </p>
-                            </div>
+                            </label>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-zinc-400 leading-relaxed">
+                          Exact rules and optional local AI can both miss context. Review findings before sharing; detection is not a security guarantee.
+                        </p>
+                      </>
+                    ) : (
+                      <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 px-3 py-2.5 text-[11px] text-emerald-700">
+                        No obvious secrets, private data, hidden text, or injection instructions detected locally.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Optional semantic structure insights */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                        <Search className="w-3.5 h-3.5 text-violet-600" />
+                        Semantic Insights
+                      </div>
+                      {semanticStatus === 'complete' && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-violet-50 text-violet-700">
+                          {semanticMatches.length ? `${semanticMatches.length} similar` : 'No duplicates'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="rounded-2xl border border-violet-100 bg-violet-50/40 p-3.5 space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-white border border-violet-100 text-violet-600 flex items-center justify-center shrink-0">
+                          {isSemanticScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-zinc-900">Find similar passages</span>
+                            <span className="text-[9px] uppercase font-black tracking-wide bg-white text-violet-600 px-1.5 py-0.5 rounded-md border border-violet-100">Optional</span>
                           </div>
-                        ))}
+                          <p className="text-[10px] text-zinc-500 leading-relaxed mt-1">
+                            Compare substantial paragraphs locally to spot repetition before you publish or study.
+                          </p>
+                        </div>
+                      </div>
+
+                      {isSemanticScanning && (
+                        <div className="space-y-1.5" aria-live="polite">
+                          <div className="h-1.5 rounded-full bg-white overflow-hidden border border-violet-100" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={semanticProgress ?? undefined}>
+                            <div
+                              className={`h-full bg-violet-600 rounded-full transition-[width] duration-300 ${semanticProgress === null ? 'w-1/3 animate-pulse' : ''}`}
+                              style={semanticProgress === null ? undefined : { width: `${semanticProgress}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-2 text-[10px] text-violet-700">
+                            <span>{semanticStatus === 'loading' ? semanticProgress === null ? 'Preparing local embeddings…' : `Downloading model… ${semanticProgress}%` : `Comparing passages… ${semanticProgress ?? 0}%`}</span>
+                            <button onClick={cancelSemanticScan} className="font-bold inline-flex items-center gap-1 hover:text-violet-900 min-h-[28px] px-1"><Square className="w-2.5 h-2.5 fill-current" /> Cancel</button>
+                          </div>
+                        </div>
+                      )}
+
+                      {semanticStatus === 'complete' && (
+                        semanticMatches.length > 0 ? (
+                          <div className="space-y-2">
+                            {semanticMatches.map(match => (
+                              <div key={`${match.first.id}-${match.second.id}`} className="rounded-xl bg-white/80 border border-violet-100 px-3 py-2.5 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[9px] uppercase font-black tracking-wide text-violet-700">{formatSemanticScore(match.score)}</span>
+                                  <span className="text-[9px] text-zinc-400">Paragraphs {match.first.id + 1} & {match.second.id + 1}</span>
+                                </div>
+                                <p className="text-[10px] text-zinc-600 leading-relaxed">{match.first.text.replace(/\s+/g, ' ').slice(0, 150)}{match.first.text.length > 150 ? '…' : ''}</p>
+                                <p className="text-[10px] text-zinc-600 leading-relaxed border-t border-violet-50 pt-2">{match.second.text.replace(/\s+/g, ' ').slice(0, 150)}{match.second.text.length > 150 ? '…' : ''}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="rounded-xl bg-white/80 border border-violet-100 px-3 py-2 text-[10px] text-violet-700">
+                            No likely duplicate passages found across {semanticSegmentCount} substantial paragraphs.
+                          </div>
+                        )
+                      )}
+
+                      {semanticStatus === 'error' && (
+                        <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2 text-[10px] text-red-700">
+                          <p>{semanticError}</p>
+                          <button onClick={handleSemanticScan} className="font-bold mt-1.5 min-h-[28px] hover:text-red-900">Retry analysis</button>
+                        </div>
+                      )}
+
+                      {!isSemanticScanning && semanticStatus !== 'complete' && semanticStatus !== 'error' && (
+                        <button
+                          onClick={handleSemanticScan}
+                          disabled={!markdown.trim()}
+                          className="w-full min-h-[40px] rounded-xl bg-violet-600 text-white text-xs font-bold hover:bg-violet-700 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          <Search className="w-3.5 h-3.5" />
+                          {semanticModelReady ? 'Analyze similar passages' : `Enable semantic insights · ~${SEMANTIC_MODEL_DOWNLOAD_MB} MB`}
+                        </button>
+                      )}
+                      <div className="flex items-start gap-1.5 text-[9px] text-zinc-400 leading-relaxed">
+                        <Lock className="w-3 h-3 shrink-0 mt-px text-emerald-600" />
+                        <span>Paragraph embeddings are computed inside this browser; document text is not uploaded. {semanticRuntime && `Using ${semanticRuntime === 'webgpu' ? 'WebGPU acceleration' : 'compatibility mode'}.`}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {conversion.brokenReferences.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                        Broken References
+                      </div>
+                      <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-[11px] text-amber-800">
+                        No definition found for: {conversion.brokenReferences.join(', ')}
                       </div>
                     </div>
                   )}
 
-                  {assets.length === 0 && grammarCorrections.length === 0 ? (
+                  {assets.length === 0 && safetyFindings.length === 0 && conversion.brokenReferences.length === 0 ? (
                     <div className="py-16 flex flex-col items-center justify-center text-center space-y-3">
                       <div className="w-14 h-14 rounded-2xl bg-zinc-100 flex items-center justify-center mb-1">
                         <Sparkles className="w-6 h-6 text-zinc-400" />
                       </div>
                       <p className="text-sm font-semibold text-zinc-700">No assets detected yet</p>
                       <p className="text-xs text-zinc-400 max-w-[220px]">
-                        Links, images, emails, and grammar fixes will automatically populate here.
+                        Links, images, emails, and document insights will automatically populate here.
                       </p>
                     </div>
                   ) : (
@@ -813,7 +1517,7 @@ const stripMarkdown = (text) => removeMarkdown(text);
             )}
           </div>
           <div className="text-zinc-400 text-[10px] text-center sm:text-right">
-            <span>Powered by <code className="bg-zinc-100 px-1.5 py-0.5 rounded text-indigo-600 font-mono">Gemini AI</code> & <code className="bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-600 font-mono">remove-markdown</code></span>
+            <span>Powered by a <code className="bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-600 font-mono">local structured parser</code></span>
           </div>
         </div>
       </div>

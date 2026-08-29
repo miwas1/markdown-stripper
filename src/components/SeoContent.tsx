@@ -17,7 +17,7 @@ const FAQS: FaqItem[] = [
   },
   {
     question: "Is my text data private and secure?",
-    answer: "Absolutely. Standard Markdown stripping, word counting, asset parsing, and TXT/DOCX file generation happen 100% locally on your device via client-side JavaScript. Your text is never transmitted to, stored on, or tracked by any external server."
+    answer: "Markdown stripping, document import, OCR, safety scanning, semantic review, word counting, asset parsing, and TXT/DOCX generation happen locally in your browser. Optional model files may download, but document text and uploaded files are not sent to the usage-measurement endpoint."
   },
   {
     question: "Can I export stripped Markdown directly to Microsoft Word (.docx)?",
@@ -25,11 +25,19 @@ const FAQS: FaqItem[] = [
   },
   {
     question: "How does the Link and Image Extractor work?",
-    answer: "While stripping Markdown formatting from the main output to keep it clean, MarkDown Stripper automatically extracts all hyperlinks, image URLs, and email addresses found in your document and organizes them neatly in the 'Insights' side panel for easy review and navigation."
+    answer: "MarkDown Stripper resolves inline and reference-style links, detects missing definitions, removes definitions from the document body, and can arrange deduplicated links and media in a reference section at the bottom. The Insights panel also keeps links, images, and emails available for review."
   },
   {
-    question: "What is the AI Grammar Fix feature?",
-    answer: "Powered by Gemini AI, this optional feature detects spelling, grammar, and phrasing issues while strictly preserving your Markdown structure, providing a list of all changes made with explanations before stripping."
+    question: "Which document files can I upload?",
+    answer: "You can import Markdown, TXT, HTML, Microsoft Word DOCX, PDFs, and common images such as PNG, JPG, and WEBP. Text extraction happens locally in your browser. Scanned PDF pages and images can be sent through optional local OCR with an automatic language suggestion and a manual language selector."
+  },
+  {
+    question: "What does the Safety & Privacy scanner check?",
+    answer: "The instant local scanner flags likely credentials, personal data, invisible Unicode, hidden HTML comments, encoded payloads, and possible prompt-injection instructions. An optional Deep local scan downloads a browser-cached English PII model to find contextual names, addresses, and identity details without uploading the document. Findings can be selectively redacted, but no scanner is a security guarantee."
+  },
+  {
+    question: "Can it find repeated or similar paragraphs?",
+    answer: "Yes. Optional Semantic Insights compare substantial paragraphs locally and show likely repeated passages with similarity scores. The feature is advisory, never rewrites your text, and runs only after you enable its small browser model."
   },
   {
     question: "Why should I convert Markdown to Plain Text?",
@@ -73,14 +81,14 @@ export const SeoContent: React.FC = () => {
             </span>
             <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2.5 py-1 rounded-full">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              100% Client-Side • Zero Data Storage
+              Core features local • No document uploads
             </div>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-zinc-900 mb-2">
             What is MarkDown Stripper?
           </h2>
           <p className="text-zinc-700 text-sm sm:text-base leading-relaxed">
-            <strong>MarkDown Stripper</strong> (<a href="https://markdown-stripper.site" className="text-indigo-600 font-medium hover:underline">markdown-stripper.site</a>) is a zero-latency, privacy-focused online utility that removes Markdown syntax formatting—including headings, asterisks, bold/italics, code fences, blockquotes, LaTeX markers, and HTML tags—from raw text to generate clean, readable plain text. It offers instant one-click copying, automatic asset extraction (hyperlinks, images, emails), and direct export to <strong>.TXT</strong> and <strong>Microsoft Word (.DOCX)</strong> files directly within your browser.
+            <strong>MarkDown Stripper</strong> (<a href="https://markdown-stripper.site" className="text-indigo-600 font-medium hover:underline">markdown-stripper.site</a>) is a zero-latency, privacy-focused online utility that removes Markdown syntax formatting—including headings, asterisks, bold/italics, code fences, blockquotes, LaTeX markers, and HTML tags—from raw text to generate clean, readable plain text. It also imports documents and images, offers private OCR for scans, optional PII review and semantic duplicate insights, automatic asset extraction (hyperlinks, images, emails), and direct export to <strong>.TXT</strong> and <strong>Microsoft Word (.DOCX)</strong> files directly within your browser.
           </p>
         </section>
 
@@ -103,9 +111,9 @@ export const SeoContent: React.FC = () => {
               <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center mb-4 shadow-indigo-100 shadow-lg">
                 <Zap className="w-5 h-5" />
               </div>
-              <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Instant Real-Time Stripping</h3>
+              <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Instant Structure-Aware Modes</h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
-                Experience sub-millisecond conversion as you type or paste. No waiting for server responses or file queues.
+                Switch between maximum-cleanup Plain, structured Readable, and safely wrapped AI-ready output without waiting for a server.
               </p>
             </div>
 
@@ -113,9 +121,9 @@ export const SeoContent: React.FC = () => {
               <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center mb-4 shadow-emerald-100 shadow-lg">
                 <ShieldCheck className="w-5 h-5" />
               </div>
-              <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">100% Client-Side Privacy</h3>
+              <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Local-First Privacy</h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
-                Your content is processed directly in your browser session. Confidential documents and private drafts never leave your device.
+                Your content is processed directly in your browser session. Core conversion, OCR, privacy scanning, and semantic review keep document text on your device.
               </p>
             </div>
 
@@ -126,16 +134,6 @@ export const SeoContent: React.FC = () => {
               <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Multi-Format Export</h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
                 Download your unformatted text as a clean <code className="text-indigo-600 font-mono">.txt</code> file or a standard Microsoft Word <code className="text-indigo-600 font-mono">.docx</code> document.
-              </p>
-            </div>
-
-            <div className="p-5 sm:p-6 rounded-2xl border border-zinc-100 bg-zinc-50/50 hover:border-indigo-100 hover:bg-white hover:shadow-md transition-all">
-              <div className="w-10 h-10 rounded-xl bg-violet-600 text-white flex items-center justify-center mb-4 shadow-violet-100 shadow-lg">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">AI Grammar Polish</h3>
-              <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
-                Fix spelling, syntax, and punctuation using Gemini AI while retaining intact Markdown hierarchy prior to conversion.
               </p>
             </div>
 
@@ -153,9 +151,29 @@ export const SeoContent: React.FC = () => {
               <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center mb-4 shadow-sky-100 shadow-lg">
                 <FileText className="w-5 h-5" />
               </div>
-              <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Drag & Drop File Support</h3>
+              <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Local Document Import</h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
-                Quickly import existing <code className="text-indigo-600 font-mono">.md</code> or <code className="text-indigo-600 font-mono">.txt</code> files directly into the workspace with full drag-and-drop support.
+                Drag in Markdown, TXT, HTML, DOCX, PDF, or image documents. Heavy parsers and OCR load only when their capability is selected.
+              </p>
+            </div>
+
+            <div className="p-5 sm:p-6 rounded-2xl border border-zinc-100 bg-zinc-50/50 hover:border-violet-100 hover:bg-white hover:shadow-md transition-all">
+              <div className="w-10 h-10 rounded-xl bg-violet-600 text-white flex items-center justify-center mb-4 shadow-violet-100 shadow-lg">
+                <Search className="w-5 h-5" />
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Local Semantic Insights</h3>
+              <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
+                Find likely repeated paragraphs and related passages with optional on-device embeddings. Results are reviewable suggestions, never silent edits.
+              </p>
+            </div>
+
+            <div className="p-5 sm:p-6 rounded-2xl border border-zinc-100 bg-zinc-50/50 hover:border-amber-100 hover:bg-white hover:shadow-md transition-all">
+              <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center mb-4 shadow-amber-100 shadow-lg">
+                <FileText className="w-5 h-5" />
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Private OCR for Scans</h3>
+              <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
+                Recover printed text from scanned PDF pages and images locally, with language suggestions, page progress, confidence warnings, and manual review.
               </p>
             </div>
           </div>
@@ -182,7 +200,7 @@ export const SeoContent: React.FC = () => {
               </div>
               <h3 className="text-base sm:text-lg font-semibold text-zinc-900">Input Your Markdown</h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
-                Paste your Markdown text into the input editor or drop a <code className="font-mono text-xs bg-zinc-200 px-1 py-0.5 rounded">.md</code> file from your device.
+                Paste Markdown into the input editor or drop a Markdown, document, PDF, or image file from your device.
               </p>
             </div>
 
