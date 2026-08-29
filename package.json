@@ -6,11 +6,12 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
-    "deploy": "npx --yes wrangler@4.127.1 pages deploy dist --project-name=markdown-stripper",
+    "cf-typegen": "npx --yes wrangler@4.127.1 types",
+    "deploy": "npx --yes wrangler@4.127.1 deploy",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test src/lib/document/document.test.ts functions/api/usage.test.ts"
+    "test": "node --import tsx --test src/lib/document/document.test.ts src/worker.test.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
@@ -28,7 +29,6 @@
     "tesseract.js": "^6.0.1"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260829.1",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",

@@ -30,17 +30,24 @@ async function readSmallBody(request: Request): Promise<string> {
   }
 }
 
-export const onRequestPost: PagesFunction<Env> = async (context) => {
-  const requestUrl = new URL(context.request.url);
-  const origin = context.request.headers.get('origin');
+export async function handleUsageRequest(request: Request, env: Env): Promise<Response> {
+  if (request.method !== 'POST') {
+    return new Response(null, {
+      status: 405,
+      headers: { allow: 'POST' },
+    });
+  }
+
+  const requestUrl = new URL(request.url);
+  const origin = request.headers.get('origin');
   if (origin !== requestUrl.origin) return new Response(null, { status: 403 });
 
-  const contentType = context.request.headers.get('content-type') ?? '';
+  const contentType = request.headers.get('content-type') ?? '';
   if (!contentType.startsWith('application/json')) return new Response(null, { status: 415 });
 
   let value: unknown;
   try {
-    value = JSON.parse(await readSmallBody(context.request));
+    value = JSON.parse(await readSmallBody(request));
   } catch {
     return new Response(null, { status: 400 });
   }
@@ -63,7 +70,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return new Response(null, { status: 400 });
   }
 
-  context.env.USAGE_ANALYTICS.writeDataPoint({
+  env.USAGE_ANALYTICS.writeDataPoint({
     indexes: [event],
     blobs: [event, feature ?? 'none', variant ?? 'none', sizeBucket ?? 'none', outcome ?? 'none'],
     doubles: [1],
@@ -73,9 +80,12 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     status: 204,
     headers: { 'cache-control': 'no-store' },
   });
-};
+}
 
-export const onRequest: PagesFunction<Env> = () => new Response(null, {
-  status: 405,
-  headers: { allow: 'POST' },
-});
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname === '/api/usage') return handleUsageRequest(request, env);
+    return new Response(null, { status: 404 });
+  },
+} satisfies ExportedHandler<Env>;
