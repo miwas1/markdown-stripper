@@ -1,12 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
-        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd
+        http://www.google.com/schemas/sitemap-image/1.1
+        http://www.google.com/schemas/sitemap-image/1.1/sitemap-image.xsd">
+  
+  <!-- Primary Homepage & Converter -->
   <url>
     <loc>https://markdown-stripper.site/</loc>
     <lastmod>2026-08-29</lastmod>
-    <changefreq>weekly</changefreq>
+    <changefreq>daily</changefreq>
     <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://markdown-stripper.site/og-image.svg</image:loc>
+      <image:title>MarkDown Stripper - Free Online Markdown to Plain Text Converter</image:title>
+      <image:caption>Instant browser-based Markdown stripping tool with DOCX export and zero latency</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://markdown-stripper.site/favicon.svg</image:loc>
+      <image:title>MarkDown Stripper Icon</image:title>
+    </image:image>
   </url>
+
 </urlset>
+
