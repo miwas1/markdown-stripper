@@ -1,8 +1,9 @@
 import type { SafetyFinding, SafetyFindingType, SafetySeverity } from './types';
 
-export const PII_MODEL_ID = 'ai4privacy/llama-ai4privacy-english-anonymiser-openpii';
-export const PII_MODEL_REVISION = '44feca39409cabb97cec13a92ec7a8b09416d57a';
-export const PII_MODEL_DOWNLOAD_MB = 151;
+export const PII_MODEL_ID = 'onnx-community/bert-small-pii-detection-ONNX';
+export const PII_MODEL_REVISION = '6cb4e77c2b2c7f81e731b88cffa9b7a6fc675a4c';
+// WebGPU uses the ~39 MB q4f16 artifact; WASM uses the ~29 MB INT8 artifact.
+export const PII_MODEL_DOWNLOAD_MB = 40;
 
 export interface PiiModelEntity {
   entity?: string;
@@ -16,11 +17,9 @@ export interface PiiModelEntity {
 export type DeepScanStatus = 'idle' | 'loading' | 'scanning' | 'complete' | 'error';
 export type DeepScanRuntime = 'webgpu' | 'wasm';
 
-export interface DeepScanRequest {
-  type: 'scan';
-  requestId: number;
-  text: string;
-}
+export type DeepScanRequest =
+  | { type: 'preload'; requestId: 0 }
+  | { type: 'scan'; requestId: number; text: string };
 
 export type DeepScanWorkerMessage =
   | { type: 'loading'; requestId: number; progress?: number; file?: string; runtime: DeepScanRuntime }

@@ -100,15 +100,16 @@ function normalizeOutput(output: unknown, offset: number): PiiModelEntity[] {
 }
 
 context.addEventListener('message', async (event: MessageEvent<DeepScanRequest>) => {
-  if (event.data.type !== 'scan') return;
-  const { requestId, text } = event.data;
+  const { requestId } = event.data;
   try {
     const preferredRuntime = await chooseRuntime();
     post({ type: 'loading', requestId, runtime: preferredRuntime });
     const session = await getDetector(requestId, preferredRuntime);
     const { detector, runtime } = session;
     post({ type: 'ready', requestId, runtime });
+    if (event.data.type === 'preload') return;
 
+    const { text } = event.data;
     const chunks = makeChunks(text);
     const entities: PiiModelEntity[] = [];
     for (let index = 0; index < chunks.length; index += 1) {

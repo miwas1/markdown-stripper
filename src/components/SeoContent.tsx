@@ -33,7 +33,7 @@ const FAQS: FaqItem[] = [
   },
   {
     question: "What does the Safety & Privacy scanner check?",
-    answer: "The instant local scanner flags likely credentials, personal data, invisible Unicode, hidden HTML comments, encoded payloads, and possible prompt-injection instructions. An optional Deep local scan downloads a browser-cached English PII model to find contextual names, addresses, and identity details without uploading the document. Findings can be selectively redacted, but no scanner is a security guarantee."
+    answer: "The instant local scanner flags likely credentials, personal data, invisible Unicode, hidden HTML comments, encoded payloads, and possible prompt-injection instructions. After page load, a compact English PII model is prepared during browser idle time and cached for optional deep scans of contextual names, addresses, and identity details without uploading the document. Findings can be selectively redacted, but no scanner is a security guarantee."
   },
   {
     question: "Can it find repeated or similar paragraphs?",
@@ -381,6 +381,7 @@ export const SeoContent: React.FC = () => {
                   }`}
                 >
                   <button
+                    data-track-button="faq_toggle"
                     onClick={() => toggleFaq(index)}
                     className="w-full px-4 sm:px-6 py-4 flex items-center justify-between text-left focus:outline-none min-h-[48px]"
                     aria-expanded={isOpen}

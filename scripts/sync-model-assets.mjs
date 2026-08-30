@@ -8,8 +8,8 @@ const CACHE_CONTROL = 'public, max-age=31536000, immutable';
 const WRANGLER = ['--yes', 'wrangler@4.127.1'];
 const models = [
   {
-    id: 'ai4privacy/llama-ai4privacy-english-anonymiser-openpii',
-    revision: '44feca39409cabb97cec13a92ec7a8b09416d57a',
+    id: 'onnx-community/bert-small-pii-detection-ONNX',
+    revision: '6cb4e77c2b2c7f81e731b88cffa9b7a6fc675a4c',
   },
   {
     id: 'mixedbread-ai/mxbai-embed-xsmall-v1',

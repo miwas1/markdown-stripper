@@ -33,9 +33,25 @@ test('records only allowlisted aggregate dimensions', async () => {
   assert.equal(response.status, 204);
   assert.deepEqual(points, [{
     indexes: ['document_import'],
-    blobs: ['document_import', 'import', 'pdf', 'small', 'success'],
+    blobs: ['document_import', 'import', 'pdf', 'small', 'success', 'none'],
     doubles: [1],
   }]);
+});
+
+test('records an allowlisted button click without visible button text', async () => {
+  const points: AnalyticsEngineDataPoint[] = [];
+  const request = makeRequest(JSON.stringify({
+    event: 'button_click',
+    button: 'export_docx',
+  }));
+
+  const response = await handleUsageRequest(request, makeEnv(points));
+  assert.equal(response.status, 204);
+  assert.deepEqual(points[0], {
+    indexes: ['button_click'],
+    blobs: ['button_click', 'none', 'none', 'none', 'none', 'export_docx'],
+    doubles: [1],
+  });
 });
 
 test('rejects unknown dimensions and cross-origin submissions', async () => {
@@ -44,6 +60,14 @@ test('rejects unknown dimensions and cross-origin submissions', async () => {
 
   const unknown = makeRequest(JSON.stringify({ event: 'page_view', variant: 'private-value' }));
   assert.equal((await handleUsageRequest(unknown, env)).status, 400);
+  assert.equal(points.length, 0);
+
+  const unknownButton = makeRequest(JSON.stringify({ event: 'button_click', button: 'Delete my document' }));
+  assert.equal((await handleUsageRequest(unknownButton, env)).status, 400);
+  assert.equal(points.length, 0);
+
+  const missingButton = makeRequest(JSON.stringify({ event: 'button_click' }));
+  assert.equal((await handleUsageRequest(missingButton, env)).status, 400);
   assert.equal(points.length, 0);
 
   const crossOrigin = makeRequest(JSON.stringify({ event: 'page_view' }), 'https://example.com');

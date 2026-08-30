@@ -12,7 +12,7 @@ The browser downloads public capability files from `models.markdown-stripper.sit
 6. In **Caching > Cache Rules**, create a rule for hostname `models.markdown-stripper.site`: mark responses eligible for cache, respect the origin's one-year TTL, and do not cache 4xx/5xx responses.
 7. Purge the hostname cache after changing its CORS policy. Do not overwrite pinned paths; update the revision in both the source and sync script instead.
 
-Before publishing a new artifact, retain its upstream license/notice requirements and verify that redistribution is permitted. The currently selected Hugging Face models advertise MIT and Apache-2.0 licenses respectively.
+Before publishing a new artifact, retain its upstream license/notice requirements and verify that redistribution is permitted. The currently selected Hugging Face models advertise Apache-2.0 licenses.
 
 To use a different hostname in a preview build, set `VITE_MODEL_ASSET_ORIGIN` before running Vite.
 

@@ -27,7 +27,7 @@
     "lucide-react": "^1.14.0",
     "mammoth": "^1.10.0",
     "motion": "^12.38.0",
-    "pdfjs-dist": "^5.4.624",
+    "pdfjs-dist": "^6.3.289",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "tesseract.js": "^6.0.1"

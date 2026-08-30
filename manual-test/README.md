@@ -54,7 +54,7 @@ Expected: this fixture contains no real credentials. Never test with genuine sec
 
 1. Reload the page in a private window so the browser model cache starts empty.
 2. Paste [fixtures/03-deep-pii.txt](fixtures/03-deep-pii.txt).
-3. Open Insights and click **Enable deep scan**.
+3. After the page becomes idle, confirm the compact model begins downloading in the background, then open Insights and click **Run deep scan**.
 4. In DevTools Network, confirm requests go to `models.markdown-stripper.site`, not `huggingface.co`.
 5. Confirm download progress changes, then the status changes to scanning and finally complete.
 6. Confirm the UI reports WebGPU or compatibility/WASM mode.

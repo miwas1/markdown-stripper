@@ -1,4 +1,6 @@
-const EVENT_NAMES = ['page_view', 'convert_markdown', 'copy_text', 'export_file', 'document_import', 'ocr_complete', 'privacy_scan_complete', 'semantic_scan_complete', 'redact_findings'] as const;
+import { BUTTON_NAMES } from './lib/analytics-config';
+
+const EVENT_NAMES = ['page_view', 'button_click', 'convert_markdown', 'copy_text', 'export_file', 'document_import', 'ocr_complete', 'privacy_scan_complete', 'semantic_scan_complete', 'redact_findings'] as const;
 const FEATURES = ['live_editor', 'clipboard', 'download', 'import', 'ocr', 'privacy_scan', 'semantic_scan', 'redaction'] as const;
 const VARIANTS = ['plain', 'readable', 'ai', 'txt', 'docx', 'markdown', 'text', 'html', 'pdf', 'image'] as const;
 const SIZE_BUCKETS = ['tiny', 'small', 'medium', 'large'] as const;
@@ -57,12 +59,15 @@ export async function handleUsageRequest(request: Request, env: Env): Promise<Re
   }
 
   const event = Reflect.get(value, 'event');
+  const button = Reflect.get(value, 'button');
   const feature = Reflect.get(value, 'feature');
   const variant = Reflect.get(value, 'variant');
   const sizeBucket = Reflect.get(value, 'sizeBucket');
   const outcome = Reflect.get(value, 'outcome');
 
   if (!isAllowed(event, EVENT_NAMES)
+    || (event === 'button_click' && !isAllowed(button, BUTTON_NAMES))
+    || (event !== 'button_click' && button !== undefined && !isAllowed(button, BUTTON_NAMES))
     || (feature !== undefined && !isAllowed(feature, FEATURES))
     || (variant !== undefined && !isAllowed(variant, VARIANTS))
     || (sizeBucket !== undefined && !isAllowed(sizeBucket, SIZE_BUCKETS))
@@ -72,7 +77,7 @@ export async function handleUsageRequest(request: Request, env: Env): Promise<Re
 
   env.USAGE_ANALYTICS.writeDataPoint({
     indexes: [event],
-    blobs: [event, feature ?? 'none', variant ?? 'none', sizeBucket ?? 'none', outcome ?? 'none'],
+    blobs: [event, feature ?? 'none', variant ?? 'none', sizeBucket ?? 'none', outcome ?? 'none', button ?? 'none'],
     doubles: [1],
   });
 

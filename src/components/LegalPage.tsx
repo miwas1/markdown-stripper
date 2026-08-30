@@ -135,8 +135,8 @@ function PrivacyPolicy() {
       </LegalSection>
 
       <LegalSection title="3. Anonymous usage measurements">
-        <p>We collect limited aggregate event information to understand whether the service is working and which features are useful. Events can include page views, conversions, imports, exports, OCR completion, privacy scans, semantic scans, and redaction actions.</p>
-        <p>Events may include a feature name, conversion or file-format variant, a broad size category, and a success or error outcome. The application does not include document text, file contents, filenames, session identifiers, or device profiles in these events. Requests are sent without credentials and the measurement endpoint does not provide a document-upload service.</p>
+        <p>We collect limited aggregate event information to understand whether the service is working and which features are useful. Events can include page views, explicitly labelled button clicks, conversions, imports, exports, OCR completion, privacy scans, semantic scans, and redaction actions.</p>
+        <p>Events may include a stable UI action ID, feature name, conversion or file-format variant, a broad size category, and a success or error outcome. The application does not include visible button text, document text, file contents, filenames, session identifiers, or device profiles in these events. Requests are sent without credentials and the measurement endpoint does not provide a document-upload service.</p>
         <p>As with any website, hosting, network, and security providers may receive standard request metadata such as an IP address, browser information, or access time in their infrastructure logs. We do not use that metadata to reconstruct the contents of your documents.</p>
       </LegalSection>
 

@@ -55,7 +55,8 @@ export async function createPdfPageRenderer(file: File): Promise<PdfPageRenderer
     'pdfjs-dist/build/pdf.worker.min.mjs',
     import.meta.url,
   ).toString();
-  const pdfDocument = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+  const pdfDocument = await loadingTask.promise;
   return {
     async render(pageNumber: number): Promise<Blob> {
       const page = await pdfDocument.getPage(pageNumber);
@@ -73,7 +74,7 @@ export async function createPdfPageRenderer(file: File): Promise<PdfPageRenderer
       return image;
     },
     destroy() {
-      void pdfDocument.destroy();
+      void loadingTask.destroy();
     },
   };
 }

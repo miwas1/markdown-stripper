@@ -9,14 +9,13 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { SeoContent } from './components/SeoContent';
 import { SeoFooter } from './components/SeoFooter';
-import { sizeBucket, trackEvent } from './lib/analytics';
+import { installButtonTracking, sizeBucket, trackEvent } from './lib/analytics';
 import { convertDocument } from './lib/document/converter';
 import { importDocument } from './lib/document/importer';
 import { redactFindings, scanDocument } from './lib/document/scanner';
 import {
   mergeSafetyFindings,
   modelEntitiesToFindings,
-  PII_MODEL_DOWNLOAD_MB,
   type DeepScanRuntime,
   type DeepScanStatus,
   type DeepScanWorkerMessage,
@@ -158,6 +157,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
 
     // Invisible background telemetry
     trackEvent('page_view', {}, true);
+    return installButtonTracking();
   }, []);
 
   // Debounce telemetry so conversion remains instant and typing does not cause
@@ -217,6 +217,24 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     const worker = new Worker(new URL('./lib/document/pii.worker.ts', import.meta.url), { type: 'module' });
     worker.onmessage = (event: MessageEvent<DeepScanWorkerMessage>) => {
       const message = event.data;
+
+      if (message.requestId === 0) {
+        if (message.type === 'loading') {
+          setDeepScanRuntime(message.runtime);
+        } else if (message.type === 'ready') {
+          setDeepModelReady(true);
+          setDeepScanRuntime(message.runtime);
+        } else if (message.type === 'error') {
+          console.warn('Background privacy model preload failed:', message.message);
+          if (!deepSourceRef.current) {
+            worker.terminate();
+            deepWorkerRef.current = null;
+            setDeepModelReady(false);
+          }
+        }
+        return;
+      }
+
       const active = deepSourceRef.current;
       if (!active || active.requestId !== message.requestId) return;
 
@@ -263,7 +281,14 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
       setDeepScanError('Could not run the deep local scan. Check your connection and available device memory, then retry.');
       deepSourceRef.current = null;
     };
-    worker.onerror = (event) => {
+    worker.onerror = event => {
+      if (!deepSourceRef.current) {
+        console.warn('Background privacy worker preload failed:', event.message);
+        worker.terminate();
+        deepWorkerRef.current = null;
+        setDeepModelReady(false);
+        return;
+      }
       console.error('Deep privacy worker error:', event.message);
       setDeepScanStatus('error');
       setDeepScanProgress(null);
@@ -276,6 +301,36 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     deepWorkerRef.current = worker;
     return worker;
   }, []);
+
+  useEffect(() => {
+    let idleId: number | undefined;
+    let timerId: number | undefined;
+
+    const preload = () => {
+      if (deepWorkerRef.current) return;
+      getDeepWorker().postMessage({ type: 'preload', requestId: 0 });
+    };
+    const schedulePreload = () => {
+      const requestIdle = Reflect.get(window, 'requestIdleCallback') as
+        | ((callback: IdleRequestCallback, options?: IdleRequestOptions) => number)
+        | undefined;
+      if (requestIdle) {
+        idleId = requestIdle(preload, { timeout: 4_000 });
+      } else {
+        timerId = window.setTimeout(preload, 1_500);
+      }
+    };
+
+    if (document.readyState === 'complete') schedulePreload();
+    else window.addEventListener('load', schedulePreload, { once: true });
+
+    return () => {
+      window.removeEventListener('load', schedulePreload);
+      const cancelIdle = Reflect.get(window, 'cancelIdleCallback') as ((handle: number) => void) | undefined;
+      if (idleId !== undefined) cancelIdle?.(idleId);
+      if (timerId !== undefined) window.clearTimeout(timerId);
+    };
+  }, [getDeepWorker]);
 
   const getOcrWorker = useCallback(() => {
     if (ocrWorkerRef.current) return ocrWorkerRef.current;
@@ -482,8 +537,6 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     getDeepWorker().postMessage({ type: 'scan', requestId, text: markdown });
   }, [deepModelReady, deepScanStatus, getDeepWorker, markdown]);
 
-  // A finding's offsets are only valid for the exact text that was scanned.
-  // Cancel in-flight work and discard stale model findings after an edit.
   useEffect(() => {
     markdownRef.current = markdown;
     const active = deepSourceRef.current;
@@ -726,12 +779,14 @@ const result = convertDocument(text, { mode: 'readable' });
             {/* Sample & Upload Buttons (Desktop) */}
             <div className="hidden md:flex items-center gap-1 border-l pl-2 border-zinc-200">
               <button
+                data-track-button="sample_desktop"
                 onClick={insertSample}
                 className="text-xs font-medium text-zinc-600 hover:text-indigo-600 transition-colors px-2.5 py-2 rounded-lg hover:bg-zinc-100 min-h-[40px]"
               >
                 Sample
               </button>
               <button
+                data-track-button="import_desktop"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isImporting}
                 className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-indigo-600 transition-colors px-2.5 py-2 rounded-lg hover:bg-zinc-100 min-h-[40px] disabled:opacity-50"
@@ -743,6 +798,7 @@ const result = convertDocument(text, { mode: 'readable' });
 
             {/* Insights & Assets Toggle */}
             <button
+              data-track-button="insights_toggle"
               onClick={() => setShowAssets(!showAssets)}
               className={`p-2.5 rounded-xl transition-all relative min-h-[44px] min-w-[44px] flex items-center justify-center ${
                 showAssets ? 'bg-indigo-50 text-indigo-600' : 'text-zinc-600 hover:bg-zinc-100 active:bg-zinc-200'
@@ -758,6 +814,7 @@ const result = convertDocument(text, { mode: 'readable' });
 
             {/* Mobile Menu Toggle */}
             <button
+              data-track-button="mobile_menu_toggle"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="p-2.5 rounded-xl text-zinc-600 hover:bg-zinc-100 active:bg-zinc-200 lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center"
               aria-label="Toggle navigation menu"
@@ -786,6 +843,7 @@ const result = convertDocument(text, { mode: 'readable' });
             >
               <div className="grid grid-cols-1 gap-2 pb-3 border-b border-zinc-100">
                 <button
+                  data-track-button="sample_mobile_menu"
                   onClick={() => {
                     insertSample();
                     setIsMobileMenuOpen(false);
@@ -796,6 +854,7 @@ const result = convertDocument(text, { mode: 'readable' });
                   <span>Insert Sample</span>
                 </button>
                 <button
+                  data-track-button="import_mobile_menu"
                   onClick={() => {
                     fileInputRef.current?.click();
                     setIsMobileMenuOpen(false);
@@ -807,6 +866,7 @@ const result = convertDocument(text, { mode: 'readable' });
                   <span>{isImporting ? 'Importing' : 'Upload File'}</span>
                 </button>
                 <button
+                  data-track-button="clear_mobile_menu"
                   onClick={() => {
                     handleClear();
                     setIsMobileMenuOpen(false);
@@ -875,6 +935,7 @@ const result = convertDocument(text, { mode: 'readable' });
                   return (
                     <button
                       key={mode.id}
+                      data-track-button={`conversion_${mode.id}`}
                       role="radio"
                       aria-checked={active}
                       onClick={() => setConversionMode(mode.id)}
@@ -896,6 +957,7 @@ const result = convertDocument(text, { mode: 'readable' });
                 })}
               </div>
               <button
+                data-track-button="references_toggle"
                 type="button"
                 role="checkbox"
                 aria-checked={appendReferences}
@@ -953,12 +1015,12 @@ const result = convertDocument(text, { mode: 'readable' });
                   {ocrStatus === 'running' ? (
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-amber-800 max-w-[150px] truncate">{ocrMessage ?? `Reading ${ocrCompletedPages}/${ocrTotalPages}`}</span>
-                      <button onClick={cancelOcr} className="min-h-[36px] px-3 rounded-lg bg-white border border-amber-200 text-amber-900 text-[10px] font-bold hover:bg-amber-100">
+                      <button data-track-button="ocr_cancel" onClick={cancelOcr} className="min-h-[36px] px-3 rounded-lg bg-white border border-amber-200 text-amber-900 text-[10px] font-bold hover:bg-amber-100">
                         Cancel
                       </button>
                     </div>
                   ) : (
-                    <button onClick={handleRunOcr} className="min-h-[36px] px-3.5 rounded-lg bg-amber-600 text-white text-[10px] font-bold hover:bg-amber-700 active:scale-[0.99]">
+                    <button data-track-button="ocr_run" onClick={handleRunOcr} className="min-h-[36px] px-3.5 rounded-lg bg-amber-600 text-white text-[10px] font-bold hover:bg-amber-700 active:scale-[0.99]">
                       {ocrStatus === 'error' ? 'Retry OCR' : 'Extract text locally'}
                     </button>
                   )}
@@ -975,6 +1037,7 @@ const result = convertDocument(text, { mode: 'readable' });
             {/* Mobile View Switcher (Visible on small & medium screens < lg) */}
             <div className="lg:hidden flex items-center justify-between bg-zinc-200/70 p-1 rounded-xl gap-1 text-xs font-semibold text-zinc-600">
               <button
+                data-track-button="mobile_input_tab"
                 onClick={() => setMobileTab('input')}
                 className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all min-h-[38px] ${
                   mobileTab === 'input' ? 'bg-white text-zinc-900 shadow-sm font-bold' : 'hover:text-zinc-900'
@@ -984,6 +1047,7 @@ const result = convertDocument(text, { mode: 'readable' });
                 <span>Input</span>
               </button>
               <button
+                data-track-button="mobile_output_tab"
                 onClick={() => setMobileTab('output')}
                 className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all min-h-[38px] ${
                   mobileTab === 'output' ? 'bg-white text-zinc-900 shadow-sm font-bold' : 'hover:text-zinc-900'
@@ -993,6 +1057,7 @@ const result = convertDocument(text, { mode: 'readable' });
                 <span>Output</span>
               </button>
               <button
+                data-track-button="mobile_both_tab"
                 onClick={() => setMobileTab('both')}
                 className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all min-h-[38px] ${
                   mobileTab === 'both' ? 'bg-white text-zinc-900 shadow-sm font-bold' : 'hover:text-zinc-900'
@@ -1007,12 +1072,14 @@ const result = convertDocument(text, { mode: 'readable' });
             <div className="flex sm:hidden items-center justify-between gap-2 overflow-x-auto pb-1 scrollbar-none">
               <div className="flex items-center gap-1.5">
                 <button
+                  data-track-button="sample_mobile"
                   onClick={insertSample}
                   className="text-xs font-semibold bg-white border border-zinc-200 text-zinc-700 px-3 py-2 rounded-xl min-h-[40px] hover:bg-zinc-50 active:scale-95 whitespace-nowrap"
                 >
                   Sample
                 </button>
                 <button
+                  data-track-button="import_mobile"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isImporting}
                   className="flex items-center gap-1 text-xs font-semibold bg-white border border-zinc-200 text-zinc-700 px-3 py-2 rounded-xl min-h-[40px] hover:bg-zinc-50 active:scale-95 whitespace-nowrap disabled:opacity-50"
@@ -1024,6 +1091,7 @@ const result = convertDocument(text, { mode: 'readable' });
 
               {markdown && (
                 <button
+                  data-track-button="clear_mobile"
                   onClick={handleClear}
                   className="p-2 text-zinc-400 hover:text-red-600 rounded-xl min-h-[40px] min-w-[40px] flex items-center justify-center"
                   title="Clear Input"
@@ -1053,6 +1121,7 @@ const result = convertDocument(text, { mode: 'readable' });
                   <div className="flex items-center gap-1.5">
                     {markdown && (
                       <button
+                        data-track-button="clear_editor"
                         onClick={handleClear}
                         className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all min-h-[36px] min-w-[36px] flex items-center justify-center"
                         title="Clear Input"
@@ -1068,7 +1137,7 @@ const result = convertDocument(text, { mode: 'readable' });
                   <div className="bg-red-50 border-b border-red-100 px-4 py-2.5 flex items-center gap-2 text-red-600 text-xs font-medium">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span className="flex-1">{error}</span>
-                    <button onClick={() => setError(null)} className="ml-auto hover:text-red-800 uppercase text-[10px] font-bold py-1 px-2">Dismiss</button>
+                    <button data-track-button="dismiss_error" onClick={() => setError(null)} className="ml-auto hover:text-red-800 uppercase text-[10px] font-bold py-1 px-2">Dismiss</button>
                   </div>
                 )}
 
@@ -1105,6 +1174,7 @@ const result = convertDocument(text, { mode: 'readable' });
                   <div className="flex items-center gap-1 sm:gap-2">
                     <div className="flex items-center bg-zinc-100 rounded-xl p-0.5">
                       <button
+                        data-track-button="export_txt"
                         onClick={handleExportText}
                         disabled={!plainText}
                         className="p-2 rounded-lg text-zinc-500 hover:text-indigo-600 hover:bg-white transition-all disabled:opacity-30 disabled:hover:text-zinc-500 min-h-[36px] min-w-[36px] flex items-center justify-center"
@@ -1114,6 +1184,7 @@ const result = convertDocument(text, { mode: 'readable' });
                         <Download className="w-4 h-4" />
                       </button>
                       <button
+                        data-track-button="export_docx"
                         onClick={handleExportDocx}
                         disabled={!plainText}
                         className="p-2 rounded-lg text-zinc-500 hover:text-indigo-600 hover:bg-white transition-all disabled:opacity-30 disabled:hover:text-zinc-500 min-h-[36px] min-w-[36px] flex items-center justify-center"
@@ -1125,6 +1196,7 @@ const result = convertDocument(text, { mode: 'readable' });
                     </div>
 
                     <button
+                      data-track-button="copy_output"
                       onClick={handleCopy}
                       disabled={!plainText}
                       className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all min-h-[38px] active:scale-95 ${
@@ -1190,6 +1262,7 @@ const result = convertDocument(text, { mode: 'readable' });
                     </div>
                   </div>
                   <button 
+                    data-track-button="insights_close"
                     onClick={() => setShowAssets(false)}
                     className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-xl transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                     aria-label="Close Insights Drawer"
@@ -1221,12 +1294,10 @@ const result = convertDocument(text, { mode: 'readable' });
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs font-bold text-zinc-900">Deep local scan</span>
-                            <span className="text-[9px] uppercase font-black tracking-wide bg-white text-indigo-600 px-1.5 py-0.5 rounded-md border border-indigo-100">
-                              Optional
-                            </span>
+                            <span className="text-[9px] uppercase font-black tracking-wide bg-white text-indigo-600 px-1.5 py-0.5 rounded-md border border-indigo-100">Optional</span>
                           </div>
                           <p className="text-[10px] text-zinc-500 leading-relaxed mt-1">
-                            Finds English names, addresses and identity details that exact pattern matching can miss.
+                            Finds contextual names, addresses, and identity details with a compact English model.
                           </p>
                         </div>
                       </div>
@@ -1245,7 +1316,7 @@ const result = convertDocument(text, { mode: 'readable' });
                                 ? deepScanProgress === null ? 'Preparing private model…' : `Downloading model… ${deepScanProgress}%`
                                 : `Checking document… ${deepScanProgress ?? 0}%`}
                             </span>
-                            <button onClick={cancelDeepScan} className="font-bold inline-flex items-center gap-1 hover:text-indigo-900 min-h-[28px] px-1">
+                            <button data-track-button="deep_scan_cancel" onClick={cancelDeepScan} className="font-bold inline-flex items-center gap-1 hover:text-indigo-900 min-h-[28px] px-1">
                               <Square className="w-2.5 h-2.5 fill-current" /> Cancel
                             </button>
                           </div>
@@ -1258,32 +1329,33 @@ const result = convertDocument(text, { mode: 'readable' });
                             <strong className="text-zinc-900">Deep scan complete.</strong>{' '}
                             {modelFindingCount ? `${modelFindingCount} additional finding${modelFindingCount === 1 ? '' : 's'}.` : 'No additional PII found.'}
                           </span>
-                          <button onClick={handleDeepScan} className="font-bold text-indigo-600 hover:text-indigo-800 shrink-0 min-h-[28px]">Scan again</button>
+                          <button data-track-button="deep_scan_repeat" onClick={handleDeepScan} className="font-bold text-indigo-600 hover:text-indigo-800 shrink-0 min-h-[28px]">Scan again</button>
                         </div>
                       )}
 
                       {deepScanStatus === 'error' && (
                         <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2 text-[10px] text-red-700">
                           <p>{deepScanError}</p>
-                          <button onClick={handleDeepScan} className="font-bold mt-1.5 min-h-[28px] hover:text-red-900">Retry deep scan</button>
+                          <button data-track-button="deep_scan_retry" onClick={handleDeepScan} className="font-bold mt-1.5 min-h-[28px] hover:text-red-900">Retry deep scan</button>
                         </div>
                       )}
 
                       {!isDeepScanning && deepScanStatus !== 'complete' && deepScanStatus !== 'error' && (
                         <button
+                          data-track-button="deep_scan_run"
                           onClick={handleDeepScan}
                           disabled={!markdown.trim()}
                           className="w-full min-h-[40px] rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
                           <Lock className="w-3.5 h-3.5" />
-                          {deepModelReady ? 'Run deep scan' : `Enable deep scan · ~${PII_MODEL_DOWNLOAD_MB} MB`}
+                          Run deep scan
                         </button>
                       )}
 
                       <div className="flex items-start gap-1.5 text-[9px] text-zinc-400 leading-relaxed">
                         <Lock className="w-3 h-3 shrink-0 mt-px text-emerald-600" />
                         <span>
-                          Your document stays on this device. The model downloads from our Cloudflare-hosted asset CDN and is cached by your browser.
+                          Your document stays on this device. The compact model is prepared in the background after page load and cached by your browser.
                           {deepScanRuntime && ` Using ${deepScanRuntime === 'webgpu' ? 'WebGPU acceleration' : 'compatibility mode'}.`}
                         </span>
                       </div>
@@ -1293,6 +1365,7 @@ const result = convertDocument(text, { mode: 'readable' });
                       <>
                         <div className="flex items-center gap-2">
                           <button
+                            data-track-button="select_all_findings"
                             onClick={selectAllFindings}
                             className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
                           >
@@ -1300,6 +1373,7 @@ const result = convertDocument(text, { mode: 'readable' });
                           </button>
                           {selectedFindingIds.size > 0 && (
                             <button
+                              data-track-button="redact_findings"
                               onClick={handleRedactSelected}
                               disabled={deferredMarkdown !== markdown}
                               className="ml-auto bg-zinc-900 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-wait"
@@ -1347,7 +1421,7 @@ const result = convertDocument(text, { mode: 'readable' });
                                         ? 'bg-indigo-100 text-indigo-700'
                                         : 'bg-zinc-200 text-zinc-600'
                                     }`}>
-                                      {finding.source === 'local-ai' ? 'Local AI' : 'Exact match'}
+                                      {finding.source === 'local-ai' ? 'Local AI' : 'Pattern match'}
                                     </span>
                                     {finding.confidence !== undefined && (
                                       <span className="text-[9px] font-bold text-zinc-500">{Math.round(finding.confidence * 100)}% confidence</span>
@@ -1411,7 +1485,7 @@ const result = convertDocument(text, { mode: 'readable' });
                           </div>
                           <div className="flex items-center justify-between gap-2 text-[10px] text-violet-700">
                             <span>{semanticStatus === 'loading' ? semanticProgress === null ? 'Preparing local embeddings…' : `Downloading model… ${semanticProgress}%` : `Comparing passages… ${semanticProgress ?? 0}%`}</span>
-                            <button onClick={cancelSemanticScan} className="font-bold inline-flex items-center gap-1 hover:text-violet-900 min-h-[28px] px-1"><Square className="w-2.5 h-2.5 fill-current" /> Cancel</button>
+                            <button data-track-button="semantic_cancel" onClick={cancelSemanticScan} className="font-bold inline-flex items-center gap-1 hover:text-violet-900 min-h-[28px] px-1"><Square className="w-2.5 h-2.5 fill-current" /> Cancel</button>
                           </div>
                         </div>
                       )}
@@ -1440,12 +1514,13 @@ const result = convertDocument(text, { mode: 'readable' });
                       {semanticStatus === 'error' && (
                         <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2 text-[10px] text-red-700">
                           <p>{semanticError}</p>
-                          <button onClick={handleSemanticScan} className="font-bold mt-1.5 min-h-[28px] hover:text-red-900">Retry analysis</button>
+                          <button data-track-button="semantic_retry" onClick={handleSemanticScan} className="font-bold mt-1.5 min-h-[28px] hover:text-red-900">Retry analysis</button>
                         </div>
                       )}
 
                       {!isSemanticScanning && semanticStatus !== 'complete' && semanticStatus !== 'error' && (
                         <button
+                          data-track-button="semantic_run"
                           onClick={handleSemanticScan}
                           disabled={!markdown.trim()}
                           className="w-full min-h-[40px] rounded-xl bg-violet-600 text-white text-xs font-bold hover:bg-violet-700 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
