@@ -9,12 +9,12 @@ export const SeoFooter: React.FC = () => {
           
           {/* Brand Col */}
           <div className="space-y-3 sm:col-span-2 lg:col-span-1">
-            <div className="flex items-center gap-2">
+            <a href="/" className="flex items-center gap-2 w-fit">
               <div className="bg-indigo-600 p-1.5 rounded-lg text-white">
                 <FileText className="w-4 h-4" />
               </div>
               <span className="text-white font-bold tracking-tight text-base">MarkDown Stripper</span>
-            </div>
+            </a>
             <p className="text-xs text-zinc-400 leading-relaxed max-w-sm">
               The free, instant browser tool to convert Markdown and documents into clean text with optional private OCR, PII scanning, and semantic insights.
             </p>
@@ -28,11 +28,11 @@ export const SeoFooter: React.FC = () => {
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">Features</h4>
             <ul className="space-y-2.5 text-xs">
-              <li><a href="#features" className="hover:text-indigo-400 transition-colors py-1 block">Real-Time Markdown Stripper</a></li>
-              <li><a href="#how-to-use" className="hover:text-indigo-400 transition-colors py-1 block">How to Convert Guide</a></li>
-              <li><a href="#syntax-reference" className="hover:text-indigo-400 transition-colors py-1 block">Syntax Conversion Matrix</a></li>
-              <li><a href="#use-cases" className="hover:text-indigo-400 transition-colors py-1 block">Supported Use Cases</a></li>
-              <li><a href="#faq" className="hover:text-indigo-400 transition-colors py-1 block">Frequently Asked Questions</a></li>
+              <li><a href="/#features" className="hover:text-indigo-400 transition-colors py-1 block">Real-Time Markdown Stripper</a></li>
+              <li><a href="/#how-to-use" className="hover:text-indigo-400 transition-colors py-1 block">How to Convert Guide</a></li>
+              <li><a href="/#syntax-reference" className="hover:text-indigo-400 transition-colors py-1 block">Syntax Conversion Matrix</a></li>
+              <li><a href="/#use-cases" className="hover:text-indigo-400 transition-colors py-1 block">Supported Use Cases</a></li>
+              <li><a href="/#faq" className="hover:text-indigo-400 transition-colors py-1 block">Frequently Asked Questions</a></li>
             </ul>
           </div>
 
@@ -67,7 +67,9 @@ export const SeoFooter: React.FC = () => {
         {/* Bottom Bar */}
         <div className="pt-6 sm:pt-8 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500 text-center sm:text-left">
           <p>© {new Date().getFullYear()} MarkDown Stripper. All rights reserved. Free & Open online utility.</p>
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+            <a href="/privacy" className="hover:text-zinc-300 transition-colors p-1">Privacy policy</a>
+            <a href="/terms" className="hover:text-zinc-300 transition-colors p-1">Terms of use</a>
             <a href="/robots.txt" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 transition-colors p-1">robots.txt</a>
             <a href="/sitemap.xml" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 transition-colors p-1">sitemap.xml</a>
             <a href="/site.webmanifest" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 transition-colors p-1">manifest</a>
