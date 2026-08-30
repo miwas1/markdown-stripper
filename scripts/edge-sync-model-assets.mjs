@@ -10,6 +10,7 @@ const models = [
   {
     id: 'onnx-community/bert-small-pii-detection-ONNX',
     revision: '6cb4e77c2b2c7f81e731b88cffa9b7a6fc675a4c',
+    onnxFiles: ['onnx/model_quantized.onnx'],
   },
   {
     id: 'mixedbread-ai/mxbai-embed-xsmall-v1',
@@ -44,12 +45,17 @@ function isBrowserModelFile(filename) {
   return /^onnx\/.*(?:_quantized|_q4f16)\.onnx(?:_data)?$/.test(filename);
 }
 
+function isRequiredModelFile(filename, model) {
+  if (!isBrowserModelFile(filename)) return false;
+  return !filename.startsWith('onnx/') || !model.onnxFiles || model.onnxFiles.includes(filename);
+}
+
 async function modelJobs(model) {
   const api = `https://huggingface.co/api/models/${model.id}/revision/${model.revision}`;
   const response = await fetch(api, { headers: { 'User-Agent': 'markdown-stripper-model-sync/1.0' } });
   if (!response.ok) throw new Error(`${response.status} discovering ${model.id}`);
   const metadata = await response.json();
-  const filenames = metadata.siblings.map(item => item.rfilename).filter(isBrowserModelFile);
+  const filenames = metadata.siblings.map(item => item.rfilename).filter(filename => isRequiredModelFile(filename, model));
   if (!filenames.some(filename => filename.startsWith('onnx/'))) {
     throw new Error(`No quantized browser ONNX files found for ${model.id}`);
   }

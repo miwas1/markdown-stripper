@@ -2,8 +2,8 @@ import type { SafetyFinding, SafetyFindingType, SafetySeverity } from './types';
 
 export const PII_MODEL_ID = 'onnx-community/bert-small-pii-detection-ONNX';
 export const PII_MODEL_REVISION = '6cb4e77c2b2c7f81e731b88cffa9b7a6fc675a4c';
-// WebGPU uses the ~39 MB q4f16 artifact; WASM uses the ~29 MB INT8 artifact.
-export const PII_MODEL_DOWNLOAD_MB = 40;
+// The reliable INT8/WASM artifact is ~29 MB, plus small tokenizer metadata.
+export const PII_MODEL_DOWNLOAD_MB = 30;
 
 export interface PiiModelEntity {
   entity?: string;

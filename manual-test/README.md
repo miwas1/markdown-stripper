@@ -56,8 +56,8 @@ Expected: this fixture contains no real credentials. Never test with genuine sec
 2. Paste [fixtures/03-deep-pii.txt](fixtures/03-deep-pii.txt).
 3. After the page becomes idle, confirm the compact model begins downloading in the background, then open Insights and click **Run deep scan**.
 4. In DevTools Network, confirm requests go to `models.markdown-stripper.site`, not `huggingface.co`.
-5. Confirm download progress changes, then the status changes to scanning and finally complete.
-6. Confirm the UI reports WebGPU or compatibility/WASM mode.
+5. Confirm the background model request completes before the scan is started.
+6. Confirm the UI reports compatibility/WASM mode.
 7. Review contextual findings for fictional names/address/identity details. Exact results can vary; the feature must finish without an error.
 8. Click **Scan again**; confirm it starts much faster and model files come from browser cache or return `304`/memory cache/disk cache.
 9. Select one Local AI finding and redact it.

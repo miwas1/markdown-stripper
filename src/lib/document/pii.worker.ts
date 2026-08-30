@@ -28,23 +28,11 @@ function post(message: DeepScanWorkerMessage): void {
   context.postMessage(message);
 }
 
-async function chooseRuntime(): Promise<DeepScanRuntime> {
-  const gpu = (navigator as Navigator & {
-    gpu?: { requestAdapter: () => Promise<unknown | null> };
-  }).gpu;
-  if (!gpu) return 'wasm';
-  try {
-    return await gpu.requestAdapter() ? 'webgpu' : 'wasm';
-  } catch {
-    return 'wasm';
-  }
-}
-
 async function loadDetector(requestId: number, runtime: DeepScanRuntime): Promise<DetectorSession> {
   const detector = await pipeline('token-classification', PII_MODEL_ID, {
     revision: PII_MODEL_REVISION,
     device: runtime,
-    dtype: runtime === 'webgpu' ? 'q4f16' : 'q8',
+    dtype: 'q8',
     progress_callback: (event: unknown) => {
       const progress = event as { status?: string; progress?: number; file?: string };
       if (progress.status !== 'progress' && progress.status !== 'download') return;
@@ -60,15 +48,9 @@ async function loadDetector(requestId: number, runtime: DeepScanRuntime): Promis
   return { detector, runtime };
 }
 
-async function getDetector(requestId: number, preferredRuntime: DeepScanRuntime): Promise<DetectorSession> {
+async function getDetector(requestId: number): Promise<DetectorSession> {
   if (!detectorPromise) {
-    detectorPromise = loadDetector(requestId, preferredRuntime).catch(error => {
-      if (preferredRuntime !== 'webgpu') throw error;
-      // Some browsers expose WebGPU while lacking an operation required by
-      // this particular model. Fall back once to broadly-supported WASM.
-      post({ type: 'loading', requestId, runtime: 'wasm' });
-      return loadDetector(requestId, 'wasm');
-    });
+    detectorPromise = loadDetector(requestId, 'wasm');
   }
   return detectorPromise;
 }
@@ -102,9 +84,8 @@ function normalizeOutput(output: unknown, offset: number): PiiModelEntity[] {
 context.addEventListener('message', async (event: MessageEvent<DeepScanRequest>) => {
   const { requestId } = event.data;
   try {
-    const preferredRuntime = await chooseRuntime();
-    post({ type: 'loading', requestId, runtime: preferredRuntime });
-    const session = await getDetector(requestId, preferredRuntime);
+    post({ type: 'loading', requestId, runtime: 'wasm' });
+    const session = await getDetector(requestId);
     const { detector, runtime } = session;
     post({ type: 'ready', requestId, runtime });
     if (event.data.type === 'preload') return;
