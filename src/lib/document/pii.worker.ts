@@ -4,6 +4,7 @@ import { env, pipeline } from '@huggingface/transformers';
 import {
   PII_MODEL_ID,
   PII_MODEL_REVISION,
+  resolveModelEntitySpans,
   type DeepScanRequest,
   type DeepScanRuntime,
   type DeepScanWorkerMessage,
@@ -100,7 +101,12 @@ context.addEventListener('message', async (event: MessageEvent<DeepScanRequest>)
         aggregation_strategy: 'simple',
         ignore_labels: ['O'],
       });
-      entities.push(...normalizeOutput(output, chunk.offset));
+      const resolved = resolveModelEntitySpans(chunk.text, normalizeOutput(output, 0));
+      entities.push(...resolved.map(entity => ({
+        ...entity,
+        start: typeof entity.start === 'number' ? entity.start + chunk.offset : null,
+        end: typeof entity.end === 'number' ? entity.end + chunk.offset : null,
+      })));
     }
     post({ type: 'scanning', requestId, progress: 100, runtime });
     post({ type: 'complete', requestId, entities, runtime });

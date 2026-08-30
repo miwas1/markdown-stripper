@@ -8,6 +8,7 @@ export const PII_MODEL_DOWNLOAD_MB = 30;
 export interface PiiModelEntity {
   entity?: string;
   entity_group?: string;
+  index?: number;
   word?: string;
   start?: number | null;
   end?: number | null;
@@ -126,12 +127,116 @@ function overlapLength(a: Pick<SafetyFinding, 'start' | 'end'>, b: Pick<SafetyFi
   return Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
 }
 
+interface TokenGroup {
+  label: string;
+  tokens: PiiModelEntity[];
+}
+
+function splitBioLabel(rawLabel: string): { prefix: string; label: string } {
+  const match = /^([BIES])-([\s\S]+)$/i.exec(rawLabel);
+  return match ? { prefix: match[1].toUpperCase(), label: match[2] } : { prefix: 'S', label: rawLabel };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function tokenPattern(tokens: PiiModelEntity[]): string {
+  let pattern = '';
+  let previousWasPunctuation = false;
+
+  for (const token of tokens) {
+    const rawWord = token.word ?? '';
+    const continuation = rawWord.startsWith('##');
+    const word = continuation ? rawWord.slice(2) : rawWord;
+    if (!word) continue;
+    const punctuation = /^[^\p{L}\p{N}]+$/u.test(word);
+    if (pattern && !continuation) pattern += punctuation || previousWasPunctuation ? '\\s*' : '\\s+';
+    pattern += escapeRegExp(word);
+    previousWasPunctuation = punctuation;
+  }
+
+  return pattern;
+}
+
+/**
+ * Some Transformers.js token-classification pipelines return raw WordPiece
+ * tokens without character offsets, even when aggregation is requested.
+ * Rebuild those spans against the original chunk so valid detections are not
+ * silently discarded.
+ */
+export function resolveModelEntitySpans(source: string, entities: PiiModelEntity[]): PiiModelEntity[] {
+  if (entities.every(entity => typeof entity.start === 'number' && typeof entity.end === 'number')) return entities;
+
+  const resolved: PiiModelEntity[] = [];
+  const groups: TokenGroup[] = [];
+  let active: TokenGroup | null = null;
+
+  const flush = (): void => {
+    if (active) groups.push(active);
+    active = null;
+  };
+
+  for (const entity of entities) {
+    if (typeof entity.start === 'number' && typeof entity.end === 'number') {
+      flush();
+      resolved.push(entity);
+      continue;
+    }
+
+    const rawLabel = entity.entity_group ?? entity.entity ?? 'PII';
+    const { prefix, label } = splitBioLabel(rawLabel);
+    if (normalizeLabel(label) === 'O') {
+      flush();
+      continue;
+    }
+    const previous = active?.tokens.at(-1);
+    const contiguous = previous?.index == null || entity.index == null || entity.index === previous.index + 1;
+    const continues = active && prefix !== 'B' && prefix !== 'S'
+      && normalizeLabel(active.label) === normalizeLabel(label) && contiguous;
+    if (!continues) {
+      flush();
+      active = { label, tokens: [entity] };
+    } else {
+      active.tokens.push(entity);
+    }
+    if (prefix === 'E' || prefix === 'S') flush();
+  }
+  flush();
+
+  let searchFrom = 0;
+  for (const group of groups) {
+    const pattern = tokenPattern(group.tokens);
+    if (!pattern) continue;
+    const matcher = new RegExp(pattern, 'iu');
+    let match = matcher.exec(source.slice(searchFrom));
+    let start = match ? searchFrom + match.index : -1;
+    if (!match) {
+      match = matcher.exec(source);
+      start = match?.index ?? -1;
+    }
+    if (!match || start < 0) continue;
+    const end = start + match[0].length;
+    const scores = group.tokens.map(token => Number(token.score ?? 0));
+    resolved.push({
+      entity_group: group.label,
+      word: source.slice(start, end),
+      start,
+      end,
+      score: scores.reduce((sum, score) => sum + score, 0) / scores.length,
+    });
+    searchFrom = Math.max(searchFrom, end);
+  }
+
+  return resolved.sort((a, b) => Number(a.start ?? 0) - Number(b.start ?? 0));
+}
+
 /** Convert model spans into the scanner's review/redaction format. */
 export function modelEntitiesToFindings(source: string, entities: PiiModelEntity[]): SafetyFinding[] {
   const lineStarts = buildLineStarts(source);
   const candidates: SafetyFinding[] = [];
 
-  for (const entity of entities) {
+  for (const entity of resolveModelEntitySpans(source, entities)) {
     const start = entity.start;
     const end = entity.end;
     const confidence = Number(entity.score ?? 0);

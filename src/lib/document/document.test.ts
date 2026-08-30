@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { convertDocument } from './converter';
 import { detectOcrLanguage } from './language';
-import { mergeSafetyFindings, modelEntitiesToFindings } from './pii';
+import { mergeSafetyFindings, modelEntitiesToFindings, resolveModelEntitySpans } from './pii';
 import { extractSemanticSegments } from './semantic';
 import { redactFindings, scanDocument } from './scanner';
 
@@ -83,6 +83,35 @@ test('model organization labels do not become false PII findings', () => {
   ]);
   assert.equal(findings.length, 1);
   assert.equal(findings[0].value, 'Ada');
+});
+
+test('reconstructs PII spans when the model returns WordPiece tokens without offsets', () => {
+  const source = 'Marisol Bennett moved to 742 Evergreen Terrace, Riverton, California 90210.';
+  const entities = [
+    { entity: 'B-PERSON', index: 1, word: 'maris', score: 0.99 },
+    { entity: 'I-PERSON', index: 2, word: '##ol', score: 0.98 },
+    { entity: 'I-PERSON', index: 3, word: 'bennett', score: 0.99 },
+    { entity: 'B-LOCATION', index: 6, word: '74', score: 0.99 },
+    { entity: 'I-LOCATION', index: 7, word: '##2', score: 0.99 },
+    { entity: 'I-LOCATION', index: 8, word: 'evergreen', score: 0.98 },
+    { entity: 'I-LOCATION', index: 9, word: 'terrace', score: 0.98 },
+    { entity: 'I-LOCATION', index: 10, word: ',', score: 0.97 },
+    { entity: 'I-LOCATION', index: 11, word: 'river', score: 0.98 },
+    { entity: 'I-LOCATION', index: 12, word: '##ton', score: 0.98 },
+    { entity: 'I-LOCATION', index: 13, word: ',', score: 0.97 },
+    { entity: 'I-LOCATION', index: 14, word: 'california', score: 0.99 },
+    { entity: 'I-LOCATION', index: 15, word: '902', score: 0.99 },
+    { entity: 'I-LOCATION', index: 16, word: '##10', score: 0.99 },
+  ];
+
+  const spans = resolveModelEntitySpans(source, entities);
+  assert.deepEqual(spans.map(span => span.word), [
+    'Marisol Bennett',
+    '742 Evergreen Terrace, Riverton, California 90210',
+  ]);
+
+  const findings = modelEntitiesToFindings(source, entities);
+  assert.deepEqual(findings.map(finding => finding.placeholder), ['PERSON', 'LOCATION']);
 });
 
 test('exact scanner findings take priority over overlapping model findings', () => {
