@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>HTML Import QA</title>
+  <style>.hidden-test { display: none; }</style>
+</head>
+<body>
+  <h1>HTML Import QA</h1>
+  <p>A paragraph with <strong>bold</strong>, <em>emphasis</em>, <del>old text</del>, and <code>inlineCode()</code>.</p>
+  <blockquote><p>This quotation should remain readable.</p></blockquote>
+  <ul><li>First item</li><li>Second item<ol><li>Nested ordered item</li></ol></li></ul>
+  <table><tr><th>Feature</th><th>Result</th></tr><tr><td>HTML import</td><td>Expected</td></tr></table>
+  <pre>const imported = true;</pre>
+  <p><a href="https://example.test/html">Fictional HTML link</a></p>
+  <img src="https://example.test/image.png" alt="Fictional HTML image">
+  <script>throw new Error('THIS SCRIPT MUST NOT BE IMPORTED');</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+All people and identifiers below are fictional test data.
+
+Marisol Bennett moved to 742 Evergreen Terrace, Riverton, California 90210. Her fictional passport reference is QA-PASSPORT-88420 and the case concerns a made-up customer profile.
+
+The review memo says that Darius Okafor met Marisol Bennett at Northwind Research Laboratory on 14 February 2025. Darius later mailed a package to Apartment 6B, 19 Harbor View Road, Lakeside.
+
+This document exists only to exercise contextual local PII detection. No identity described here belongs to a real person.

@@ -131,7 +131,7 @@ function PrivacyPolicy() {
       <LegalSection title="2. Your documents and text">
         <p>Core conversion, document import, OCR, safety and privacy scanning, semantic review, word counting, reference extraction, and TXT/DOCX generation run in your browser. The text you paste and the files you select are not sent to MarkDown Stripper’s usage-measurement endpoint for processing.</p>
         <p>Files are subject to the browser’s memory and temporary-session behavior. Clear your input or close the browser when you no longer want the content available in the page.</p>
-        <p>Optional OCR and local AI features may download model or language files to your browser from their respective providers. Those downloads are capability files, not uploads of your document content. The providers’ own terms and privacy policies may apply to those requests.</p>
+        <p>Optional OCR and local AI features may download model, runtime, or language files to your browser from our dedicated Cloudflare-hosted asset domain. Those requests download capability files only; they never upload your document content. The underlying third-party artifacts remain subject to their respective licenses.</p>
       </LegalSection>
 
       <LegalSection title="3. Anonymous usage measurements">
@@ -145,7 +145,7 @@ function PrivacyPolicy() {
       </LegalSection>
 
       <LegalSection title="5. Links and third-party services">
-        <p>The app can display or open links found in the content you provide. It can also request optional model or language resources from third-party providers. When you follow a link or use a third-party service, that provider’s policies govern its handling of your visit and any information you share there.</p>
+        <p>The app can display or open links found in the content you provide. It can also request optional model or language resources from our dedicated asset domain. When you follow a link or use a third-party service, that provider’s policies govern its handling of your visit and any information you share there.</p>
       </LegalSection>
 
       <LegalSection title="6. Security and retention">

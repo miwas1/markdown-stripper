@@ -1,13 +1,17 @@
 /// <reference lib="webworker" />
 
-import { pipeline } from '@huggingface/transformers';
+import { env, pipeline } from '@huggingface/transformers';
 import {
   PII_MODEL_ID,
+  PII_MODEL_REVISION,
   type DeepScanRequest,
   type DeepScanRuntime,
   type DeepScanWorkerMessage,
   type PiiModelEntity,
 } from './pii';
+import { TRANSFORMERS_REMOTE_HOST } from './model-assets';
+
+env.remoteHost = TRANSFORMERS_REMOTE_HOST;
 
 const context = self as unknown as DedicatedWorkerGlobalScope;
 const CHUNK_SIZE = 8_000;
@@ -38,6 +42,7 @@ async function chooseRuntime(): Promise<DeepScanRuntime> {
 
 async function loadDetector(requestId: number, runtime: DeepScanRuntime): Promise<DetectorSession> {
   const detector = await pipeline('token-classification', PII_MODEL_ID, {
+    revision: PII_MODEL_REVISION,
     device: runtime,
     dtype: runtime === 'webgpu' ? 'q4f16' : 'q8',
     progress_callback: (event: unknown) => {

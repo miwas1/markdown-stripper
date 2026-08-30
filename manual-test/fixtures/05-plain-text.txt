@@ -1,0 +1,6 @@
+Plain text import fixture
+
+This file has no Markdown formatting.
+Line two should remain visible.
+Fictional contact: plain.qa@example.test
+Reference number: TXT-2048

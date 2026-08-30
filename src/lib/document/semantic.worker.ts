@@ -1,15 +1,19 @@
 /// <reference lib="webworker" />
 
-import { pipeline } from '@huggingface/transformers';
+import { env, pipeline } from '@huggingface/transformers';
 import {
   extractSemanticSegments,
   SEMANTIC_MODEL_ID,
+  SEMANTIC_MODEL_REVISION,
   type SemanticRequest,
   type SemanticRuntime,
   type SemanticWorkerMessage,
   type SemanticSegment,
   type SemanticMatch,
 } from './semantic';
+import { TRANSFORMERS_REMOTE_HOST } from './model-assets';
+
+env.remoteHost = TRANSFORMERS_REMOTE_HOST;
 
 const context = self as unknown as DedicatedWorkerGlobalScope;
 type Extractor = (text: string | string[], options?: Record<string, unknown>) => Promise<unknown>;
@@ -28,6 +32,7 @@ async function chooseRuntime(): Promise<SemanticRuntime> {
 
 async function loadExtractor(requestId: number, runtime: SemanticRuntime): Promise<ExtractorSession> {
   const extractor = await pipeline('feature-extraction', SEMANTIC_MODEL_ID, {
+    revision: SEMANTIC_MODEL_REVISION,
     device: runtime,
     dtype: runtime === 'webgpu' ? 'q4f16' : 'q8',
     progress_callback: (event: unknown) => {

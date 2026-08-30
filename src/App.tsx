@@ -1283,7 +1283,7 @@ const result = convertDocument(text, { mode: 'readable' });
                       <div className="flex items-start gap-1.5 text-[9px] text-zinc-400 leading-relaxed">
                         <Lock className="w-3 h-3 shrink-0 mt-px text-emerald-600" />
                         <span>
-                          Your document stays on this device. The model downloads once from Hugging Face and is cached by your browser.
+                          Your document stays on this device. The model downloads from our Cloudflare-hosted asset CDN and is cached by your browser.
                           {deepScanRuntime && ` Using ${deepScanRuntime === 'webgpu' ? 'WebGPU acceleration' : 'compatibility mode'}.`}
                         </span>
                       </div>

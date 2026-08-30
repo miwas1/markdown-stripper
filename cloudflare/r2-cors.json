@@ -1,0 +1,17 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": [
+          "https://markdown-stripper.site",
+          "https://www.markdown-stripper.site",
+          "http://localhost:3000"
+        ],
+        "methods": ["GET", "HEAD"],
+        "headers": ["Range"]
+      },
+      "exposeHeaders": ["Accept-Ranges", "Content-Length", "Content-Range", "ETag", "cf-cache-status"],
+      "maxAgeSeconds": 86400
+    }
+  ]
+}

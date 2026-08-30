@@ -1,6 +1,7 @@
 import type { SafetyFinding, SafetyFindingType, SafetySeverity } from './types';
 
 export const PII_MODEL_ID = 'ai4privacy/llama-ai4privacy-english-anonymiser-openpii';
+export const PII_MODEL_REVISION = '44feca39409cabb97cec13a92ec7a8b09416d57a';
 export const PII_MODEL_DOWNLOAD_MB = 151;
 
 export interface PiiModelEntity {

@@ -1,4 +1,5 @@
 export const SEMANTIC_MODEL_ID = 'mixedbread-ai/mxbai-embed-xsmall-v1';
+export const SEMANTIC_MODEL_REVISION = 'e6ac24e5d6efb8782b59de1647b3ececb4ece94e';
 export const SEMANTIC_MODEL_DOWNLOAD_MB = 25;
 
 export interface SemanticSegment {

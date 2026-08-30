@@ -2,6 +2,11 @@
 
 import { createWorker, type Worker as TesseractWorker } from 'tesseract.js';
 import type { OcrLanguageCode } from './language-options';
+import {
+  TESSERACT_CORE_PATH,
+  TESSERACT_LANGUAGE_PATH,
+  TESSERACT_WORKER_PATH,
+} from './model-assets';
 
 interface OcrRequest {
   type: 'recognize';
@@ -31,6 +36,9 @@ async function getWorker(language: OcrLanguageCode, requestId: number): Promise<
   }
   workerLanguage = language;
   workerPromise = createWorker(language, 1, {
+    workerPath: TESSERACT_WORKER_PATH,
+    corePath: TESSERACT_CORE_PATH,
+    langPath: TESSERACT_LANGUAGE_PATH,
     logger: event => {
       const progress = typeof event.progress === 'number' ? Math.round(event.progress * 100) : undefined;
       post({ type: 'loading', requestId, progress, message: event.status });
