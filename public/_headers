@@ -5,6 +5,7 @@
 /*
   Cache-Control: public, max-age=0, must-revalidate
   Referrer-Policy: no-referrer
+  Origin-Agent-Cluster: ?1
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
-  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), tools=(self)

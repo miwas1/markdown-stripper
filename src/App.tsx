@@ -36,8 +36,17 @@ import {
   type SemanticStatus,
   type SemanticWorkerMessage,
 } from './lib/document/semantic';
-import type { ConversionMode, SafetyFinding } from './lib/document/types';
+import type { ConversionMode, DocumentReference, SafetyFinding } from './lib/document/types';
 import type { OcrSource } from './lib/document/types';
+import {
+  isRecord,
+  optionalNumberInput,
+  stringArrayInput,
+  stringInput,
+  webMcpError,
+  webMcpResult,
+  type WebMCPTool,
+} from './lib/webmcp';
 
 interface ExtractedAsset {
   type: 'link' | 'email' | 'image';
@@ -50,6 +59,34 @@ const CONVERSION_MODES: Array<{ id: ConversionMode; label: string; description: 
   { id: 'readable', label: 'Readable', description: 'Preserve useful structure' },
   { id: 'ai', label: 'AI-ready', description: 'Safe structured context' },
 ];
+
+function isConversionMode(value: unknown): value is ConversionMode {
+  return value === 'plain' || value === 'readable' || value === 'ai';
+}
+
+interface WebMCPRuntime {
+  markdown: string;
+  plainText: string;
+  conversionMode: ConversionMode;
+  appendReferences: boolean;
+  importedFileName: string | null;
+  importWarnings: string[];
+  assets: ExtractedAsset[];
+  references: DocumentReference[];
+  brokenReferences: string[];
+  safetyFindings: SafetyFinding[];
+  deepScanStatus: DeepScanStatus;
+  semanticStatus: SemanticStatus;
+  replaceMarkdown: (value: string) => void;
+  setConversionMode: (value: ConversionMode) => void;
+  setAppendReferences: React.Dispatch<React.SetStateAction<boolean>>;
+  handleCopy: () => Promise<boolean>;
+  handleExportText: () => void;
+  handleDeepScan: () => void;
+  handleClear: () => void;
+  insertSample: () => void;
+  setShowAssets: React.Dispatch<React.SetStateAction<boolean>>;
+}
 
 export default function App() {
   const [markdown, setMarkdown] = useState<string>('');
@@ -87,6 +124,7 @@ export default function App() {
   const [semanticError, setSemanticError] = useState<string | null>(null);
   const [semanticRuntime, setSemanticRuntime] = useState<SemanticRuntime | null>(null);
   const [semanticModelReady, setSemanticModelReady] = useState(false);
+  const [webMcpStatus, setWebMcpStatus] = useState<'checking' | 'ready' | 'unsupported' | 'error'>('checking');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const deepWorkerRef = useRef<Worker | null>(null);
   const deepRequestIdRef = useRef(0);
@@ -100,6 +138,7 @@ export default function App() {
   const semanticRequestIdRef = useRef(0);
   const semanticSourceRef = useRef<{ requestId: number; text: string } | null>(null);
   const lastSemanticTextRef = useRef<string | null>(null);
+  const webMcpRuntimeRef = useRef<WebMCPRuntime | null>(null);
   const deferredMarkdown = useDeferredValue(markdown);
   const conversion = useMemo(
     () => convertDocument(markdown, { mode: conversionMode, appendReferences }),
@@ -568,18 +607,20 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
   }, []);
 
   const handleCopy = useCallback(async () => {
-    if (!plainText) return;
+    if (!plainText) return false;
     try {
       await navigator.clipboard.writeText(plainText);
       setCopied(true);
       trackEvent('copy_text', { feature: 'clipboard', sizeBucket: sizeBucket(plainText.length), outcome: 'success' });
       setTimeout(() => setCopied(false), 2000);
+      return true;
     } catch (err) {
       console.error('Failed to copy!', err);
+      return false;
     }
   }, [plainText]);
 
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     cancelDeepScan();
     cancelOcr();
     cancelSemanticScan();
@@ -603,7 +644,32 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     setSemanticProgress(null);
     setSemanticError(null);
     setError(null);
-  };
+  }, [cancelDeepScan, cancelOcr, cancelSemanticScan]);
+
+  const replaceMarkdown = useCallback((value: string) => {
+    cancelDeepScan();
+    cancelOcr();
+    cancelSemanticScan();
+    setMarkdown(value);
+    setImportedFileName(null);
+    setImportWarnings([]);
+    setOcrSource(null);
+    setOcrStatus('idle');
+    setOcrProgress(null);
+    setOcrError(null);
+    setOcrDetectedLanguage(null);
+    setOcrCompletedPages(0);
+    setOcrTotalPages(0);
+    setOcrMessage(null);
+    setDeepScanFindings([]);
+    setSelectedFindingIds(new Set());
+    setSemanticMatches([]);
+    setSemanticSegmentCount(0);
+    setSemanticStatus('idle');
+    setSemanticProgress(null);
+    setSemanticError(null);
+    setError(null);
+  }, [cancelDeepScan, cancelOcr, cancelSemanticScan]);
 
   const handleExportText = () => {
     if (!plainText) return;
@@ -735,6 +801,296 @@ const result = convertDocument(text, { mode: 'readable' });
     trackEvent('redact_findings', { feature: 'redaction', outcome: 'success' });
     setSelectedFindingIds(new Set());
   };
+
+  // Keep the latest React state and actions behind one stable ref. WebMCP
+  // registration happens once, while tool calls always see the current page.
+  webMcpRuntimeRef.current = {
+    markdown,
+    plainText,
+    conversionMode,
+    appendReferences,
+    importedFileName,
+    importWarnings,
+    assets,
+    references: conversion.references,
+    brokenReferences: conversion.brokenReferences,
+    safetyFindings,
+    deepScanStatus,
+    semanticStatus,
+    replaceMarkdown,
+    setConversionMode: value => setConversionMode(value),
+    setAppendReferences,
+    handleCopy,
+    handleExportText,
+    handleDeepScan,
+    handleClear,
+    insertSample,
+    setShowAssets,
+  };
+
+  useEffect(() => {
+    const modelContext = document.modelContext;
+    if (!modelContext) {
+      setWebMcpStatus('unsupported');
+      return;
+    }
+
+    const controller = new AbortController();
+    const getRuntime = () => webMcpRuntimeRef.current;
+    const tools: WebMCPTool[] = [
+      {
+        name: 'get_document_state',
+        description: 'Read the current Markdown input, conversion settings, output statistics, sources, and local safety-scan status without changing the document.',
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        annotations: { readOnlyHint: true, idempotentHint: true, untrustedContentHint: true },
+        execute: async () => {
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          return webMcpResult({
+            markdownLength: runtime.markdown.length,
+            wordCount: runtime.markdown.trim() ? runtime.markdown.trim().split(/\s+/).length : 0,
+            outputLength: runtime.plainText.length,
+            conversionMode: runtime.conversionMode,
+            appendReferences: runtime.appendReferences,
+            importedFileName: runtime.importedFileName,
+            importWarnings: runtime.importWarnings,
+            referenceCount: runtime.references.length,
+            brokenReferenceCount: runtime.brokenReferences.length,
+            assetCount: runtime.assets.length,
+            safetyFindingCount: runtime.safetyFindings.length,
+            deepScanStatus: runtime.deepScanStatus,
+            semanticStatus: runtime.semanticStatus,
+          });
+        },
+      },
+      {
+        name: 'get_converted_text',
+        description: 'Return the current converted plain-text output so an agent can review, summarize, or use it in a follow-up action. The result is bounded to avoid oversized tool responses.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            maxCharacters: { type: 'number', minimum: 1, maximum: 50000, default: 20000, description: 'Maximum number of output characters to return.' },
+          },
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: true, idempotentHint: true, untrustedContentHint: true },
+        execute: async input => {
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          if (isRecord(input) && input.maxCharacters !== undefined
+            && optionalNumberInput(input, 'maxCharacters', 1, 50000) === undefined) {
+            return webMcpError('maxCharacters must be a number from 1 to 50000.');
+          }
+          const maxCharacters = optionalNumberInput(input, 'maxCharacters', 1, 50000) ?? 20000;
+          return webMcpResult({
+            text: runtime.plainText.slice(0, maxCharacters),
+            truncated: runtime.plainText.length > maxCharacters,
+            totalCharacters: runtime.plainText.length,
+            mode: runtime.conversionMode,
+          });
+        },
+      },
+      {
+        name: 'set_document_content',
+        description: 'Replace the current Markdown document with supplied text. This updates the visible editor and conversion output; it does not upload the document.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            text: { type: 'string', maxLength: 200000, description: 'Markdown, plain text, or compatible source content.' },
+          },
+          required: ['text'],
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: false, idempotentHint: true },
+        execute: async input => {
+          const text = stringInput(input, 'text', 200000);
+          if (text === null) return webMcpError('text is required and must be a string of at most 200000 characters.');
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          runtime.replaceMarkdown(text);
+          return webMcpResult({ updated: true, markdownLength: text.length });
+        },
+      },
+      {
+        name: 'set_conversion_options',
+        description: 'Set the conversion mode and whether extracted references are appended to the output. Use plain for maximum cleanup, readable to preserve useful structure, or ai for structured context.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            mode: { type: 'string', enum: ['plain', 'readable', 'ai'], description: 'Conversion mode.' },
+            appendReferences: { type: 'boolean', description: 'Whether references and media are appended at the bottom.' },
+          },
+          minProperties: 1,
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: false, idempotentHint: true },
+        execute: async input => {
+          if (!isRecord(input)) return webMcpError('Provide mode and/or appendReferences.');
+          const mode = input.mode;
+          const append = input.appendReferences;
+          if (mode === undefined && append === undefined) return webMcpError('Provide mode and/or appendReferences.');
+          if (mode !== undefined && !isConversionMode(mode)) return webMcpError('mode must be plain, readable, or ai.');
+          if (append !== undefined && typeof append !== 'boolean') return webMcpError('appendReferences must be boolean.');
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          if (mode !== undefined) runtime.setConversionMode(mode);
+          if (append !== undefined) runtime.setAppendReferences(append);
+          return webMcpResult({
+            updated: true,
+            conversionMode: mode ?? runtime.conversionMode,
+            appendReferences: append ?? runtime.appendReferences,
+          });
+        },
+      },
+      {
+        name: 'list_document_assets',
+        description: 'List links, images, email addresses, and broken references extracted from the current Markdown document.',
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        annotations: { readOnlyHint: true, idempotentHint: true, untrustedContentHint: true },
+        execute: async () => {
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          return webMcpResult({ assets: runtime.assets, references: runtime.references, brokenReferences: runtime.brokenReferences });
+        },
+      },
+      {
+        name: 'get_safety_findings',
+        description: 'Read local safety and privacy findings for the current document. Findings include stable IDs and line numbers that can be passed to redact_document_findings.',
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        annotations: { readOnlyHint: true, idempotentHint: true, untrustedContentHint: true },
+        execute: async () => {
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          return webMcpResult({
+            findings: runtime.safetyFindings.map(finding => ({
+              id: finding.id,
+              type: finding.type,
+              severity: finding.severity,
+              title: finding.title,
+              detail: finding.detail,
+              line: finding.line,
+              placeholder: finding.placeholder,
+              source: finding.source,
+              confidence: finding.confidence,
+            })),
+          });
+        },
+      },
+      {
+        name: 'run_deep_privacy_scan',
+        description: 'Start the optional local AI privacy scan. The scan runs in the browser and does not upload document content; call get_safety_findings afterward to read results.',
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        annotations: { readOnlyHint: false, idempotentHint: true },
+        execute: async () => {
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          if (!runtime.markdown.trim()) return webMcpError('Add document content before running a privacy scan.');
+          runtime.handleDeepScan();
+          runtime.setShowAssets(true);
+          return webMcpResult({ started: true, status: 'loading-or-scanning', privacy: 'local-only' });
+        },
+      },
+      {
+        name: 'redact_document_findings',
+        description: 'Replace selected local safety findings with safe placeholders in the visible Markdown editor. This is a document mutation and should be used only after reviewing the finding IDs.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            findingIds: { type: 'array', items: { type: 'string', maxLength: 100 }, maxItems: 100, description: 'Stable finding IDs returned by get_safety_findings.' },
+            redactAll: { type: 'boolean', description: 'Redact all current findings when true.' },
+          },
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+        execute: async input => {
+          if (!isRecord(input)) return webMcpError('Provide findingIds or redactAll.');
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          const redactAll = input.redactAll;
+          if (redactAll !== undefined && typeof redactAll !== 'boolean') return webMcpError('redactAll must be boolean.');
+          const ids = input.findingIds === undefined ? [] : stringArrayInput(input, 'findingIds', 100, 100);
+          if (ids === null) return webMcpError('findingIds must be an array of at most 100 strings.');
+          const selected = redactAll ? runtime.safetyFindings.map(finding => finding.id) : ids;
+          if (!selected.length) return webMcpError('No finding IDs were provided and no findings are available.');
+          const known = new Set(runtime.safetyFindings.map(finding => finding.id));
+          const unknown = selected.filter(id => !known.has(id));
+          if (unknown.length) return webMcpError(`Unknown finding ID: ${unknown[0]}`);
+          const redacted = redactFindings(runtime.markdown, runtime.safetyFindings, new Set(selected));
+          runtime.replaceMarkdown(redacted);
+          return webMcpResult({ redacted: selected.length, updated: true });
+        },
+      },
+      {
+        name: 'copy_converted_text',
+        description: 'Copy the current converted output to the user’s clipboard using the same visible Copy action as the human UI.',
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        annotations: { readOnlyHint: false, idempotentHint: true },
+        execute: async () => {
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          if (!runtime.plainText) return webMcpError('There is no converted output to copy.');
+          const copied = await runtime.handleCopy();
+          if (!copied) return webMcpError('The browser did not allow clipboard access.');
+          return webMcpResult({ copied: true, characters: runtime.plainText.length });
+        },
+      },
+      {
+        name: 'download_converted_text',
+        description: 'Download the current converted output as a local .txt file using the app’s visible export action.',
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        annotations: { readOnlyHint: false, idempotentHint: true },
+        execute: async () => {
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          if (!runtime.plainText) return webMcpError('There is no converted output to download.');
+          runtime.handleExportText();
+          return webMcpResult({ downloadStarted: true, filename: 'converted-text.txt' });
+        },
+      },
+      {
+        name: 'clear_document',
+        description: 'Clear the current document, scan results, imported-file state, and conversion output from the visible editor.',
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+        execute: async () => {
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          runtime.handleClear();
+          return webMcpResult({ cleared: true });
+        },
+      },
+      {
+        name: 'insert_sample_document',
+        description: 'Insert the app’s sample Markdown document to demonstrate conversion, references, assets, and safety insights.',
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        annotations: { readOnlyHint: false, idempotentHint: true },
+        execute: async () => {
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          runtime.insertSample();
+          return webMcpResult({ inserted: true });
+        },
+      },
+    ];
+
+    const registerTools = async () => {
+      const results = await Promise.all(tools.map(async tool => {
+        try {
+          await modelContext.registerTool(tool, { signal: controller.signal });
+          return true;
+        } catch (error) {
+          if (!controller.signal.aborted) console.warn(`WebMCP tool registration failed for ${tool.name}:`, error);
+          return false;
+        }
+      }));
+      if (!controller.signal.aborted) {
+        setWebMcpStatus(results.some(Boolean) ? 'ready' : 'error');
+      }
+    };
+
+    void registerTools();
+    return () => controller.abort();
+  }, []);
 
   const totalAssetsCount = assets.length + safetyFindings.length + conversion.brokenReferences.length;
   const isDeepScanning = deepScanStatus === 'loading' || deepScanStatus === 'scanning';
@@ -1592,6 +1948,10 @@ const result = convertDocument(text, { mode: 'readable' });
             )}
           </div>
           <div className="text-zinc-400 text-[10px] text-center sm:text-right">
+            <span className="inline-flex items-center gap-1.5 mr-3" aria-live="polite" title="WebMCP lets compatible browser agents use the editor's structured tools">
+              <span className={`w-1.5 h-1.5 rounded-full ${webMcpStatus === 'ready' ? 'bg-emerald-500' : webMcpStatus === 'error' ? 'bg-amber-500' : 'bg-zinc-300'}`} />
+              <span>Agent tools: {webMcpStatus === 'ready' ? 'ready' : webMcpStatus === 'unsupported' ? 'browser unavailable' : webMcpStatus === 'error' ? 'retry unavailable' : 'checking'}</span>
+            </span>
             <span>Powered by a <code className="bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-600 font-mono">local structured parser</code></span>
           </div>
         </div>
