@@ -21,6 +21,7 @@ MarkDown Stripper converts GitHub Flavored Markdown (GFM), CommonMark, LLM outpu
 
 ## WebMCP agent workflow
 - The top-level page registers 14 imperative WebMCP tools when `document.modelContext` is available.
+- No MCP server configuration is required. A compatible agent discovers these page-local Site tools while the page is open in its built-in browser; the project does not currently expose a remote MCP endpoint for traditional MCP clients.
 - The handoff remains review-first: a person must approve the exact reviewed version in Insights before agent copy/export tools can run.
 - Read tools expose bounded document state, converted output, extracted assets, privacy findings, and a content-free handoff readiness checklist.
 - Write tools can set content/options, prepare an AI-ready handoff, start local privacy scanning, redact reviewed findings, copy/download output, insert the sample, and clear the editor.

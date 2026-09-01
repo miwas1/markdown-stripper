@@ -1,17 +1,25 @@
 import type { OcrSource } from './types';
+import type { MappedOcrWord } from './image-redaction';
 
 export interface OcrRecognitionResult {
   text: string;
   confidence: number;
+  words: MappedOcrWord[];
 }
 
 export type OcrWorkerMessage =
   | { type: 'loading' | 'recognizing'; requestId: number; progress?: number; message?: string }
-  | { type: 'complete'; requestId: number; text: string; confidence: number }
+  | { type: 'complete'; requestId: number; text: string; confidence: number; words: MappedOcrWord[] }
   | { type: 'error'; requestId: number; message: string };
 
+export interface OcrPreparedImage {
+  image: Blob;
+  width: number;
+  height: number;
+}
+
 interface PdfPageRenderer {
-  render(pageNumber: number): Promise<Blob>;
+  render(pageNumber: number): Promise<OcrPreparedImage>;
   destroy(): void;
 }
 
@@ -35,7 +43,7 @@ async function canvasToBlob(canvas: HTMLCanvasElement | OffscreenCanvas): Promis
   });
 }
 
-export async function imageFileToOcrImage(file: File): Promise<Blob> {
+export async function imageFileToOcrImage(file: Blob): Promise<OcrPreparedImage> {
   const bitmap = await createImageBitmap(file);
   const maxDimension = 1800;
   const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
@@ -46,7 +54,7 @@ export async function imageFileToOcrImage(file: File): Promise<Blob> {
   if (!context) throw new Error('Your browser could not create an OCR canvas.');
   context.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
-  return canvasToBlob(canvas);
+  return { image: await canvasToBlob(canvas), width, height };
 }
 
 export async function createPdfPageRenderer(file: File): Promise<PdfPageRenderer> {
@@ -58,7 +66,7 @@ export async function createPdfPageRenderer(file: File): Promise<PdfPageRenderer
   const loadingTask = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
   const pdfDocument = await loadingTask.promise;
   return {
-    async render(pageNumber: number): Promise<Blob> {
+    async render(pageNumber: number): Promise<OcrPreparedImage> {
       const page = await pdfDocument.getPage(pageNumber);
       const baseViewport = page.getViewport({ scale: 1 });
       const scale = Math.min(2, 1800 / Math.max(baseViewport.width, baseViewport.height));
@@ -71,7 +79,7 @@ export async function createPdfPageRenderer(file: File): Promise<PdfPageRenderer
       await page.render({ canvas, canvasContext: context, viewport }).promise;
       const image = await canvasToBlob(canvas);
       page.cleanup();
-      return image;
+      return { image, width: canvas.width, height: canvas.height };
     },
     destroy() {
       void loadingTask.destroy();

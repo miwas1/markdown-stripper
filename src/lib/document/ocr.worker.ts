@@ -2,6 +2,8 @@
 
 import { createWorker, type Worker as TesseractWorker } from 'tesseract.js';
 import type { OcrLanguageCode } from './language-options';
+import { buildMappedOcrText, type OcrWordInput } from './image-redaction';
+import type { MappedOcrWord } from './image-redaction';
 import {
   TESSERACT_CORE_PATH,
   TESSERACT_LANGUAGE_PATH,
@@ -17,7 +19,7 @@ interface OcrRequest {
 
 type OcrMessage =
   | { type: 'loading' | 'recognizing'; requestId: number; progress?: number; message?: string }
-  | { type: 'complete'; requestId: number; text: string; confidence: number }
+  | { type: 'complete'; requestId: number; text: string; confidence: number; words: MappedOcrWord[] }
   | { type: 'error'; requestId: number; message: string };
 
 const context = self as unknown as DedicatedWorkerGlobalScope;
@@ -53,12 +55,26 @@ context.addEventListener('message', async (event: MessageEvent<OcrRequest>) => {
   try {
     const worker = await getWorker(language, requestId);
     post({ type: 'recognizing', requestId, progress: 0, message: 'Reading page' });
-    const result = await worker.recognize(image);
+    const result = await worker.recognize(image, {}, { text: true, blocks: true });
+    const lines: OcrWordInput[][] = [];
+    for (const block of result.data.blocks ?? []) {
+      for (const paragraph of block.paragraphs) {
+        for (const line of paragraph.lines) {
+          lines.push(line.words.map(word => ({
+            text: word.text,
+            confidence: Number(word.confidence ?? 0),
+            bbox: word.bbox,
+          })));
+        }
+      }
+    }
+    const mapped = buildMappedOcrText(lines);
     post({
       type: 'complete',
       requestId,
-      text: result.data.text.trim(),
+      text: mapped.text || result.data.text.trim(),
       confidence: Number(result.data.confidence ?? 0),
+      words: mapped.words,
     });
   } catch (error) {
     workerPromise = null;

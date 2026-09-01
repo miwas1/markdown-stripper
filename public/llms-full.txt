@@ -61,6 +61,8 @@ All conversion and parsing happens client-side using JavaScript in the user's br
 ## 5. WebMCP Site Tools
 When the browser supports WebMCP, the top-level document registers 14 imperative tools so an agent can work with the same live editor state as a human. Unsupported browsers keep the normal editor.
 
+No MCP JSON or server configuration is required. In a compatible built-in browser, the agent discovers these page-local Site tools from the open page. MarkDown Stripper does not currently expose a remote MCP endpoint, so traditional MCP clients cannot add these tools through their MCP configuration yet.
+
 Read tools: `get_document_state`, `get_converted_text`, `list_document_assets`, `get_safety_findings`, and `get_handoff_readiness`.
 
 Write tools: `set_document_content`, `set_conversion_options`, `prepare_agent_handoff`, `run_deep_privacy_scan`, `redact_document_findings`, `copy_converted_text`, `download_converted_text`, `insert_sample_document`, and `clear_document`.

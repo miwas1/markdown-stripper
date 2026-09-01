@@ -9,6 +9,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { SeoContent } from './components/SeoContent';
 import { SeoFooter } from './components/SeoFooter';
+import { ImageRedactionWorkspace } from './components/ImageRedactionWorkspace';
 import { installButtonTracking, sizeBucket, trackEvent } from './lib/analytics';
 import { convertDocument } from './lib/document/converter';
 import { importDocument } from './lib/document/importer';
@@ -28,6 +29,12 @@ import {
   type OcrRecognitionResult,
   type OcrWorkerMessage,
 } from './lib/document/ocr';
+import {
+  findingsToImageSuggestions,
+  inspectVerificationText,
+  normalizeOcrWords,
+  type NormalizedOcrWord,
+} from './lib/document/image-redaction';
 import { OCR_LANGUAGES, type OcrLanguageCode } from './lib/document/language-options';
 import {
   formatSemanticScore,
@@ -116,6 +123,9 @@ interface WebMCPRuntime {
   appendReferences: boolean;
   importedFileName: string | null;
   importWarnings: string[];
+  imageRedactionActive: boolean;
+  imageOcrCoordinatesReady: boolean;
+  imageRedactionSuggestionCount: number;
   assets: ExtractedAsset[];
   references: DocumentReference[];
   brokenReferences: string[];
@@ -168,6 +178,9 @@ function syncWebMcpDocument(runtime: WebMCPRuntime, markdown: string): void {
   runtime.markdown = markdown;
   runtime.importedFileName = null;
   runtime.importWarnings = [];
+  runtime.imageRedactionActive = false;
+  runtime.imageOcrCoordinatesReady = false;
+  runtime.imageRedactionSuggestionCount = 0;
   runtime.assets = extractAssets(markdown, nextConversion.references);
   runtime.safetyFindings = scanDocument(markdown);
   runtime.deepScanStatus = 'idle';
@@ -220,6 +233,9 @@ export default function App() {
   const [ocrCompletedPages, setOcrCompletedPages] = useState(0);
   const [ocrTotalPages, setOcrTotalPages] = useState(0);
   const [ocrMessage, setOcrMessage] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageOcrText, setImageOcrText] = useState<string | null>(null);
+  const [imageOcrWords, setImageOcrWords] = useState<NormalizedOcrWord[]>([]);
   const [semanticMatches, setSemanticMatches] = useState<SemanticMatch[]>([]);
   const [semanticSegmentCount, setSemanticSegmentCount] = useState(0);
   const [semanticStatus, setSemanticStatus] = useState<SemanticStatus>('idle');
@@ -255,6 +271,11 @@ export default function App() {
   const safetyFindings = useMemo(
     () => mergeSafetyFindings(quickSafetyFindings, deepScanFindings, deferredFingerprint),
     [quickSafetyFindings, deepScanFindings, deferredFingerprint],
+  );
+  const imageMappingCurrent = imageFile !== null && imageOcrText !== null && markdown === imageOcrText;
+  const imageRedactionSuggestions = useMemo(
+    () => imageMappingCurrent ? findingsToImageSuggestions(safetyFindings, imageOcrWords) : [],
+    [imageMappingCurrent, imageOcrWords, safetyFindings],
   );
   const handoffSummary = useMemo(
     () => summarizeAgentHandoff({
@@ -503,7 +524,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
         const resolver = ocrResolversRef.current.get(message.requestId);
         if (!resolver) return;
         ocrResolversRef.current.delete(message.requestId);
-        resolver.resolve({ text: message.text, confidence: message.confidence });
+        resolver.resolve({ text: message.text, confidence: message.confidence, words: message.words });
       } else if (message.type === 'error') {
         const resolver = ocrResolversRef.current.get(message.requestId);
         if (!resolver) return;
@@ -551,6 +572,17 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     });
   }, [getOcrWorker]);
 
+  const verifyRedactedImage = useCallback(async (image: Blob, selectedOriginalValues: string[]) => {
+    const prepared = await imageFileToOcrImage(image);
+    const result = await recognizeOcrImage(prepared.image, ocrLanguage);
+    return inspectVerificationText(
+      result.text,
+      scanDocument(result.text),
+      selectedOriginalValues,
+      result.confidence,
+    );
+  }, [ocrLanguage, recognizeOcrImage]);
+
   const handleRunOcr = useCallback(async () => {
     if (!ocrSource || ocrStatus === 'running') return;
     const source = ocrSource;
@@ -571,12 +603,15 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
       for (let index = 0; index < pageNumbers.length; index += 1) {
         if (markdownRef.current !== sourceText) return;
         const pageNumber = pageNumbers[index];
-        const image = source.kind === 'pdf'
+        const prepared = source.kind === 'pdf'
           ? await renderer!.render(pageNumber)
           : await imageFileToOcrImage(source.file);
         if (markdownRef.current !== sourceText) return;
-        const result = await recognizeOcrImage(image, ocrLanguage);
+        const result = await recognizeOcrImage(prepared.image, ocrLanguage);
         if (result.text) pageTexts[pageNumber - 1] = result.text;
+        if (source.kind === 'image') {
+          setImageOcrWords(normalizeOcrWords(result.words, prepared.width, prepared.height));
+        }
         if (result.confidence < 55) warnings.push(`Page ${pageNumber} OCR confidence was ${Math.round(result.confidence)}%; review its text.`);
         setOcrCompletedPages(index + 1);
         setOcrProgress(Math.round(((index + 1) / pageNumbers.length) * 100));
@@ -584,9 +619,10 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
       }
       if (markdownRef.current !== sourceText) return;
       const extracted = pageTexts.filter(Boolean).join('\n\n').trim();
+      if (source.kind === 'image') setImageOcrText(extracted);
       setMarkdown(extracted);
       setImportWarnings(current => [...current.filter(warning => !/OCR confidence/.test(warning)), ...warnings]);
-      setOcrSource(null);
+      setOcrSource(source.kind === 'image' ? source : null);
       setOcrStatus('complete');
       setOcrProgress(100);
       setOcrMessage(`Extracted ${pageNumbers.length} page${pageNumbers.length === 1 ? '' : 's'} locally`);
@@ -773,6 +809,9 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     setOcrCompletedPages(0);
     setOcrTotalPages(0);
     setOcrMessage(null);
+    setImageFile(null);
+    setImageOcrText(null);
+    setImageOcrWords([]);
     setSemanticMatches([]);
     setSemanticSegmentCount(0);
     setSemanticStatus('idle');
@@ -797,6 +836,9 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     setOcrCompletedPages(0);
     setOcrTotalPages(0);
     setOcrMessage(null);
+    setImageFile(null);
+    setImageOcrText(null);
+    setImageOcrWords([]);
     setDeepScanFindings([]);
     setSelectedFindingIds(new Set());
     setSemanticMatches([]);
@@ -837,7 +879,9 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
 
   const handleFileUpload = async (file: File) => {
     if (isImporting) return;
+    cancelDeepScan();
     cancelOcr();
+    cancelSemanticScan();
     setIsImporting(true);
     setError(null);
     setImportWarnings([]);
@@ -853,6 +897,9 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
       setOcrCompletedPages(0);
       setOcrTotalPages(imported.ocr?.pageNumbers?.length ?? 0);
       setOcrMessage(null);
+      setImageFile(imported.format === 'image' ? file : null);
+      setImageOcrText(null);
+      setImageOcrWords([]);
       const { detectOcrLanguage } = await import('./lib/document/language');
       const language = detectOcrLanguage(imported.text);
       setOcrDetectedLanguage(imported.ocr
@@ -942,6 +989,9 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     appendReferences,
     importedFileName,
     importWarnings,
+    imageRedactionActive: imageFile !== null,
+    imageOcrCoordinatesReady: imageMappingCurrent,
+    imageRedactionSuggestionCount: imageRedactionSuggestions.length,
     assets,
     references: conversion.references,
     brokenReferences: conversion.brokenReferences,
@@ -992,6 +1042,9 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
             appendReferences: runtime.appendReferences,
             importedFileName: runtime.importedFileName,
             importWarnings: runtime.importWarnings,
+            imageRedactionActive: runtime.imageRedactionActive,
+            imageOcrCoordinatesReady: runtime.imageOcrCoordinatesReady,
+            imageRedactionSuggestionCount: runtime.imageRedactionSuggestionCount,
             referenceCount: runtime.references.length,
             brokenReferenceCount: runtime.brokenReferences.length,
             assetCount: runtime.assets.length,
@@ -1445,7 +1498,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                     handleClear();
                     setIsMobileMenuOpen(false);
                   }}
-                  disabled={!markdown}
+                  disabled={!markdown && !imageFile}
                   className="flex items-center justify-center gap-2 text-xs font-semibold bg-red-50 text-red-600 p-3 rounded-xl min-h-[44px] hover:bg-red-100 active:scale-98 disabled:opacity-40"
                 >
                   <Trash2 className="w-4 h-4 text-red-500" />
@@ -1519,14 +1572,23 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                   <p className="mt-2 max-w-2xl text-xs leading-relaxed text-indigo-100 sm:text-sm">
                     You import and review the document. An agent can inspect the same live editor, prepare AI-ready output, surface local privacy findings, and hand the final decision back to you.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowAssets(true)}
-                    className="mt-4 inline-flex min-h-[40px] items-center gap-2 rounded-xl bg-white px-3.5 py-2 text-xs font-bold text-indigo-900 transition-colors hover:bg-indigo-50"
-                  >
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    Open local insights
-                  </button>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAssets(true)}
+                      className="inline-flex min-h-[40px] items-center gap-2 rounded-xl bg-white px-3.5 py-2 text-xs font-bold text-indigo-900 transition-colors hover:bg-indigo-50"
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      Open local insights
+                    </button>
+                    <a
+                      href="#connect-agent"
+                      className="inline-flex min-h-[40px] items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-white/15"
+                    >
+                      <Bot className="h-3.5 w-3.5" />
+                      Connect your agent
+                    </a>
+                  </div>
                 </div>
 
                 <div className="rounded-2xl border border-white/15 bg-white/10 p-3.5 backdrop-blur-sm sm:p-4">
@@ -1543,6 +1605,84 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                     Current page: <span className="font-bold text-white">{handoffSummary.headline}</span>
                   </p>
                 </div>
+              </div>
+            </section>
+
+            <section id="connect-agent" className="scroll-mt-20 rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="connect-agent-title">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="max-w-2xl">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-indigo-600">
+                    <Bot className="h-3.5 w-3.5" />
+                    Site tools setup
+                  </div>
+                  <h2 id="connect-agent-title" className="mt-1.5 text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">Connect your agent—no MCP configuration required</h2>
+                  <p className="mt-1.5 text-xs leading-relaxed text-zinc-600 sm:text-sm">
+                    MarkDown Stripper uses page-local WebMCP Site tools. A compatible agent discovers them when this page is open; there is no server URL, command, or JSON snippet to install.
+                  </p>
+                </div>
+                <span className={`inline-flex min-h-[30px] shrink-0 items-center gap-1.5 self-start rounded-full px-2.5 text-[10px] font-bold ${
+                  webMcpStatus === 'ready'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : webMcpStatus === 'error'
+                      ? 'bg-amber-50 text-amber-700'
+                      : 'bg-zinc-100 text-zinc-600'
+                }`} aria-live="polite">
+                  <span className={`h-1.5 w-1.5 rounded-full ${webMcpStatus === 'ready' ? 'bg-emerald-500' : webMcpStatus === 'error' ? 'bg-amber-500' : 'bg-zinc-400'}`} />
+                  {webMcpStatus === 'ready'
+                    ? `${WEBMCP_TOOL_COUNT} tools discovered`
+                    : webMcpStatus === 'unsupported'
+                      ? 'Site tools unavailable here'
+                      : webMcpStatus === 'error'
+                        ? 'Tool discovery failed'
+                        : 'Checking this browser…'}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3.5">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-black text-white">1</span>
+                    <h3 className="text-xs font-bold text-zinc-900">Open in ChatGPT desktop</h3>
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
+                    Update the ChatGPT desktop app, use ChatGPT Work or Codex with a Site-tools-capable model—currently GPT-5.6 Sol or Terra—and open this page in its built-in browser.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3.5">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-black text-white">2</span>
+                    <h3 className="text-xs font-bold text-zinc-900">Check, then ask</h3>
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
+                    Select <strong>Site tools</strong> in the browser address bar and inspect <strong>Available site tools</strong>. Then ask: “Prepare this document for an agent handoff and tell me what I should review.”
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-3.5">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-700 text-[10px] font-black text-white">3</span>
+                    <h3 className="text-xs font-bold text-zinc-900">Other MCP clients</h3>
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
+                    Traditional MCP clients cannot add these page-local tools through configuration yet because this project does not expose a remote MCP server. They can still use the normal website interface.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-col gap-2 rounded-xl border border-zinc-100 bg-zinc-50 px-3.5 py-3 text-[10px] leading-relaxed text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
+                <p>
+                  <strong className="text-zinc-700">Developer preview:</strong> Chrome 149+ can test the page after enabling <code className="rounded bg-white px-1 py-0.5 font-mono text-zinc-700">chrome://flags/#enable-webmcp-testing</code> and relaunching. Availability in ChatGPT depends on app version, model, workspace, and rollout; Site tools are currently unavailable in Enterprise and Edu workspaces.
+                </p>
+                <a
+                  href="https://learn.chatgpt.com/docs/webmcp"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-[32px] shrink-0 items-center gap-1.5 self-start rounded-lg border border-zinc-200 bg-white px-2.5 font-bold text-indigo-700 hover:border-indigo-200 hover:text-indigo-900 sm:self-center"
+                >
+                  Official Site tools guide
+                  <ExternalLink className="h-3 w-3" />
+                </a>
               </div>
             </section>
 
@@ -1641,7 +1781,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                     </div>
                   ) : (
                     <button data-track-button="ocr_run" onClick={handleRunOcr} className="min-h-[36px] px-3.5 rounded-lg bg-amber-600 text-white text-[10px] font-bold hover:bg-amber-700 active:scale-[0.99]">
-                      {ocrStatus === 'error' ? 'Retry OCR' : 'Extract text locally'}
+                      {ocrStatus === 'error' ? 'Retry OCR' : ocrStatus === 'complete' ? 'Run OCR again' : 'Extract text locally'}
                     </button>
                   )}
                 </div>
@@ -1652,6 +1792,18 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                 )}
                 {ocrStatus === 'error' && <p className="text-[10px] text-red-700 w-full">{ocrError}</p>}
               </section>
+            )}
+
+            {imageFile && (
+              <ImageRedactionWorkspace
+                file={imageFile}
+                suggestions={imageRedactionSuggestions}
+                ocrComplete={imageMappingCurrent}
+                mappingStale={imageOcrText !== null && !imageMappingCurrent}
+                deepScanStatus={deepScanStatus}
+                onRunDeepScan={() => { handleDeepScan(); }}
+                onVerify={verifyRedactedImage}
+              />
             )}
             
             {/* Mobile View Switcher (Visible on small & medium screens < lg) */}
@@ -1709,7 +1861,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                 </button>
               </div>
 
-              {markdown && (
+              {(markdown || imageFile) && (
                 <button
                   data-track-button="clear_mobile"
                   onClick={handleClear}
@@ -1739,7 +1891,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                     <span className="text-xs font-bold uppercase tracking-wider">Markdown Input</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    {markdown && (
+                    {(markdown || imageFile) && (
                       <button
                         data-track-button="clear_editor"
                         onClick={handleClear}

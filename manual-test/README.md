@@ -19,14 +19,15 @@ This is the priority test for the newly added challenge work. It verifies tool d
 
 1. Open the deployed app in ChatGPT’s in-app browser. In Chrome, enable the WebMCP flag, relaunch, and reload the deployed URL.
 2. Confirm the dark **Human + agent workflow** banner appears near the top of the page. In a compatible browser it should say **14 tools ready**; the footer should say **Agent tools: ready**.
-3. Open the Model Context Tool Inspector or the browser’s WebMCP tool inspector. Confirm these 14 tools are registered once:
+3. Confirm the visible **Connect your agent** section explains that no MCP JSON/server configuration is required, shows the current browser discovery status, distinguishes page-local WebMCP from a remote MCP server, and links to the official Site tools guide.
+4. Open the Model Context Tool Inspector or the browser’s WebMCP tool inspector. Confirm these 14 tools are registered once:
 
    - Read tools: `get_document_state`, `get_converted_text`, `list_document_assets`, `get_safety_findings`, `get_handoff_readiness`.
    - Write tools: `set_document_content`, `set_conversion_options`, `prepare_agent_handoff`, `run_deep_privacy_scan`, `redact_document_findings`, `copy_converted_text`, `download_converted_text`, `insert_sample_document`, `clear_document`.
 
-4. Inspect at least one tool definition. Confirm it has a useful `title`, description, JSON Schema, and only current WebMCP annotations (`readOnlyHint` and, for content-bearing reads, `untrustedContentHint`).
-5. In DevTools → Network, inspect the document response headers. Confirm `Origin-Agent-Cluster: ?1` and `Permissions-Policy: ... tools=(self)` are present.
-6. Open the same URL in a browser with WebMCP disabled or unavailable. Confirm the footer reports **Agent tools: browser unavailable**, the editor remains usable, and conversion/copy/import still work.
+5. Inspect at least one tool definition. Confirm it has a useful `title`, description, JSON Schema, and only current WebMCP annotations (`readOnlyHint` and, for content-bearing reads, `untrustedContentHint`).
+6. In DevTools → Network, inspect the document response headers. Confirm `Origin-Agent-Cluster: ?1` and `Permissions-Policy: ... tools=(self)` are present.
+7. Open the same URL in a browser with WebMCP disabled or unavailable. Confirm the footer reports **Agent tools: browser unavailable**, the editor remains usable, and conversion/copy/import still work.
 
 Expected: the page registers imperative tools on the top-level `document.modelContext`; WebMCP is an enhancement, not a requirement for human use.
 
@@ -152,11 +153,15 @@ Also test the **Upload** button instead of drag-and-drop once.
 ## 9. Image OCR
 
 1. Upload [fixtures/09-ocr-english.png](fixtures/09-ocr-english.png).
-2. Confirm an OCR-available panel appears, English is selected/defaulted, and the privacy message says processing stays local.
-3. Start OCR. Confirm Tesseract worker/core/language requests use `models.markdown-stripper.site`.
-4. Confirm progress advances and the output includes `MARKDOWN STRIPPER OCR TEST`, `Invoice QA-2048`, and `Total 127.45` with reasonable accuracy.
-5. Upload [fixtures/10-ocr-french.png](fixtures/10-ocr-french.png), manually select French, and run OCR. Confirm it recognizes most of `Bonjour`, `confidentialité`, and `référence FR-731`.
-6. Run English OCR again. Confirm cached assets make startup faster.
+2. Confirm the image-redaction preview appears immediately, before OCR, and the privacy message says processing stays local.
+3. Enable **Draw manually**, drag over `Invoice QA-2048`, disable drawing, and toggle **Preview result**. Confirm the selected region becomes a solid black preview and can be removed/re-added without changing the source image.
+4. Confirm an OCR-available panel appears and English is selected/defaulted. Start OCR and confirm Tesseract worker/core/language requests use `models.markdown-stripper.site`.
+5. Confirm progress advances and the output includes `MARKDOWN STRIPPER OCR TEST`, `Invoice QA-2048`, and `Total 127.45` with reasonable accuracy. The redaction workspace should now report its mapped privacy-suggestion state without moving the manual box.
+6. Export the redacted PNG. Confirm it uses the source basename with `-redacted.png`, opens at the original pixel dimensions, contains opaque black pixels over the selected region, and has no EXIF/GPS metadata.
+7. Click **Verify exported image locally**. Confirm a second OCR pass finishes and reports whether any privacy findings or selected values remain readable.
+8. Edit the extracted OCR text. Confirm automatic coordinate boxes are hidden as stale while manual boxes remain; click **Run OCR again** to refresh the mapping.
+9. Upload [fixtures/10-ocr-french.png](fixtures/10-ocr-french.png), manually select French, and run OCR. Confirm it recognizes most of `Bonjour`, `confidentialité`, and `référence FR-731`.
+10. Run English OCR again. Confirm cached assets make startup faster.
 
 ## 10. Scanned PDF OCR
 

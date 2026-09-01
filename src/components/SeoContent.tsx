@@ -20,6 +20,10 @@ const FAQS: FaqItem[] = [
     answer: "In a compatible browser, WebMCP gives an agent structured tools for the same visible editor: it can inspect bounded document state, prepare AI-ready output, check a content-free handoff readiness summary, review local privacy findings, and perform approved redaction or export actions. You keep the final say, and browsers without WebMCP keep the normal editor.",
   },
   {
+    question: "Do I need to add an MCP configuration to my agent?",
+    answer: "No. MarkDown Stripper currently provides page-local WebMCP Site tools, which a compatible agent discovers automatically while this page is open in the built-in browser. There is no remote MCP server URL or JSON configuration to install. Traditional MCP clients can still use the normal website, but they cannot connect to these tools as a remote MCP server yet.",
+  },
+  {
     question: "Is my text data private and secure?",
     answer: "Markdown stripping, document import, OCR, safety scanning, semantic review, word counting, asset parsing, and TXT/DOCX generation happen locally in your browser. Optional model files may download, but document text and uploaded files are not sent to the usage-measurement endpoint."
   },

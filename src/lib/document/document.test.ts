@@ -6,6 +6,14 @@ import { makeTokenAwareChunks, mergeSafetyFindings, modelEntitiesToFindings, res
 import { extractSemanticSegments } from './semantic';
 import { redactFindings, redactFindingsSafely, scanDocument } from './scanner';
 import { summarizeAgentHandoff } from './handoff';
+import {
+  buildMappedOcrText,
+  collectRedactionRects,
+  findingsToImageSuggestions,
+  inspectVerificationText,
+  normalizeOcrWords,
+  redactedImageFileName,
+} from './image-redaction';
 
 test('resolves inline and reference links in first-use order', () => {
   const source = `# Notes
@@ -267,4 +275,53 @@ test('agent handoff readiness stays review-first and content-free', () => {
   const approved = summarizeAgentHandoff({ ...cleanInput, humanApprovalGranted: true });
   assert.equal(approved.readiness, 'ready');
   assert.equal(approved.agentHandoffReady, true);
+});
+
+test('OCR word boxes retain exact character offsets and normalize to image coordinates', () => {
+  const mapped = buildMappedOcrText([
+    [
+      { text: 'Email', confidence: 98, bbox: { x0: 10, y0: 20, x1: 50, y1: 40 } },
+      { text: 'ada@example.com', confidence: 94, bbox: { x0: 60, y0: 20, x1: 180, y1: 40 } },
+    ],
+    [{ text: 'Private', confidence: 91, bbox: { x0: 10, y0: 60, x1: 70, y1: 80 } }],
+  ]);
+
+  assert.equal(mapped.text, 'Email ada@example.com\nPrivate');
+  assert.deepEqual(mapped.words.map(word => [word.text, word.start, word.end, word.line]), [
+    ['Email', 0, 5, 0],
+    ['ada@example.com', 6, 21, 0],
+    ['Private', 22, 29, 1],
+  ]);
+  const normalized = normalizeOcrWords(mapped.words, 200, 100);
+  assert.deepEqual(normalized[1].rect, { x: 0.3, y: 0.2, width: 0.6000000000000001, height: 0.2 });
+});
+
+test('privacy findings map to padded image regions and selected rectangles', () => {
+  const mapped = buildMappedOcrText([[
+    { text: 'Email', confidence: 98, bbox: { x0: 10, y0: 10, x1: 50, y1: 30 } },
+    { text: 'ada@example.com', confidence: 98, bbox: { x0: 60, y0: 10, x1: 180, y1: 30 } },
+  ]]);
+  const words = normalizeOcrWords(mapped.words, 200, 100);
+  const findings = scanDocument(mapped.text);
+  const suggestions = findingsToImageSuggestions(findings, words);
+
+  assert.equal(suggestions.length, 1);
+  assert.equal(suggestions[0].placeholder, 'EMAIL');
+  assert.ok(suggestions[0].rects[0].x < 0.3);
+  assert.ok(suggestions[0].rects[0].width > 0.6);
+  const rects = collectRedactionRects(suggestions, new Set([suggestions[0].id]), [
+    { x: 0.1, y: 0.7, width: 0.2, height: 0.1 },
+  ]);
+  assert.equal(rects.length, 2);
+});
+
+test('image verification reports surviving selected values without returning them', () => {
+  const text = 'Email ada@example.com remains visible.';
+  const findings = scanDocument(text);
+  const result = inspectVerificationText(text, findings, ['ada@example.com', 'Grace Hopper'], 87);
+
+  assert.equal(result.remainingFindingCount, 1);
+  assert.equal(result.selectedValuesStillVisible, 1);
+  assert.deepEqual(result.remainingFindingTitles, ['Email address']);
+  assert.equal(redactedImageFileName('private.scan.jpeg'), 'private.scan-redacted.png');
 });

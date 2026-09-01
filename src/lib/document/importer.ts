@@ -148,11 +148,13 @@ export async function importDocument(file: File): Promise<ImportedDocument> {
   if (extension === 'docx') return importDocx(file);
   if (extension === 'pdf') return importPdf(file);
   if (['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].includes(extension)) {
+    const warnings = ['This image is ready for local OCR and redaction. No image data leaves your device.'];
+    if (extension === 'gif') warnings.push('Animated GIFs are handled as a single still frame and export as PNG.');
     return {
       text: '',
       fileName: file.name,
       format: 'image',
-      warnings: ['This image is ready for local OCR. No image data leaves your device.'],
+      warnings,
       ocr: { kind: 'image', file, pageNumbers: [1] },
     };
   }

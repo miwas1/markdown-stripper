@@ -12,6 +12,8 @@ MarkDown Stripper is a local-first document handoff workspace: people import mes
 
 The demo should be opened in ChatGPT’s in-app browser, or in Google Chrome 149+ with `chrome://flags/#enable-webmcp-testing` enabled. Browsers without WebMCP still get the complete human editor.
 
+No MCP server configuration is required: these are page-local WebMCP Site tools discovered while the page is open in a compatible built-in browser. The project does not currently expose a remote MCP endpoint for traditional MCP clients.
+
 ## The WebMCP use case
 
 The difficult part of sharing a document with an agent is not only removing Markdown. It is deciding what the agent should see, preserving useful sources, and giving a person a clear privacy checkpoint before content leaves the editor.
@@ -56,6 +58,7 @@ The implementation follows the current WebMCP shape: `execute` returns ordinary 
 - Structure-aware Plain, Readable, and AI-ready conversion
 - Local import for Markdown, TXT, HTML, DOCX, PDF, and common images
 - Browser OCR for images and scanned PDF pages
+- Local image redaction with OCR/PII suggestions, manual boxes, original-resolution PNG export, metadata stripping, and optional verification OCR
 - Unicode-aware deterministic checks (including checksum-validated financial identifiers) plus an optional local PII model
 - Snapshot-bound selective redaction with stable finding IDs, deterministic overlap handling, and consistent aliases for repeated values
 - Local semantic duplicate detection
