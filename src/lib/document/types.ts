@@ -38,6 +38,8 @@ export type SafetySeverity = 'high' | 'medium' | 'low';
 
 export interface SafetyFinding {
   id: string;
+  /** Revision marker for the exact source text that produced this finding. */
+  documentFingerprint: string;
   type: SafetyFindingType;
   severity: SafetySeverity;
   title: string;

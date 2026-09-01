@@ -4,6 +4,7 @@ import { env, pipeline } from '@huggingface/transformers';
 import {
   PII_MODEL_ID,
   PII_MODEL_REVISION,
+  makeTokenAwareChunks,
   resolveModelEntitySpans,
   type DeepScanRequest,
   type DeepScanRuntime,
@@ -15,10 +16,21 @@ import { TRANSFORMERS_REMOTE_HOST } from './model-assets';
 env.remoteHost = TRANSFORMERS_REMOTE_HOST;
 
 const context = self as unknown as DedicatedWorkerGlobalScope;
-const CHUNK_SIZE = 8_000;
-const CHUNK_OVERLAP = 240;
+const FALLBACK_MODEL_TOKENS = 512;
+const TOKEN_SAFETY_MARGIN = 8;
+const CHUNK_OVERLAP_TOKENS = 64;
 
-type Detector = (text: string, options?: Record<string, unknown>) => Promise<unknown>;
+interface TokenizerOutput {
+  input_ids: number[] | number[][] | { dims?: number[] };
+}
+interface Detector {
+  (text: string, options?: Record<string, unknown>): Promise<unknown>;
+  tokenizer: {
+    model_max_length?: number;
+    (text: string, options?: Record<string, unknown>): TokenizerOutput;
+  };
+  model?: { config?: { max_position_embeddings?: number } };
+}
 interface DetectorSession {
   detector: Detector;
   runtime: DeepScanRuntime;
@@ -56,21 +68,27 @@ async function getDetector(requestId: number): Promise<DetectorSession> {
   return detectorPromise;
 }
 
-function makeChunks(text: string): Array<{ text: string; offset: number }> {
-  if (text.length <= CHUNK_SIZE) return [{ text, offset: 0 }];
-  const chunks: Array<{ text: string; offset: number }> = [];
-  let start = 0;
-  while (start < text.length) {
-    let end = Math.min(text.length, start + CHUNK_SIZE);
-    if (end < text.length) {
-      const boundary = Math.max(text.lastIndexOf('\n', end), text.lastIndexOf(' ', end));
-      if (boundary > start + CHUNK_SIZE / 2) end = boundary;
-    }
-    chunks.push({ text: text.slice(start, end), offset: start });
-    if (end >= text.length) break;
-    start = Math.max(start + 1, end - CHUNK_OVERLAP);
+function usableModelTokens(detector: Detector): number {
+  const candidates = [
+    detector.tokenizer.model_max_length,
+    detector.model?.config?.max_position_embeddings,
+  ].filter((value): value is number => typeof value === 'number'
+    && Number.isFinite(value) && value >= 32 && value < 1_000_000);
+  return Math.max(8, Math.min(...(candidates.length ? candidates : [FALLBACK_MODEL_TOKENS])) - TOKEN_SAFETY_MARGIN);
+}
+
+function countTokens(detector: Detector, text: string): number {
+  const output = detector.tokenizer(text, {
+    add_special_tokens: true,
+    truncation: false,
+    return_tensor: false,
+  });
+  if (Array.isArray(output.input_ids)) {
+    if (Array.isArray(output.input_ids[0])) return output.input_ids[0].length;
+    return output.input_ids.length;
   }
-  return chunks;
+  const dims = output.input_ids.dims;
+  return dims?.at(-1) ?? 0;
 }
 
 function normalizeOutput(output: unknown, offset: number): PiiModelEntity[] {
@@ -92,7 +110,12 @@ context.addEventListener('message', async (event: MessageEvent<DeepScanRequest>)
     if (event.data.type === 'preload') return;
 
     const { text } = event.data;
-    const chunks = makeChunks(text);
+    const chunks = makeTokenAwareChunks(
+      text,
+      usableModelTokens(detector),
+      CHUNK_OVERLAP_TOKENS,
+      value => countTokens(detector, value),
+    );
     const entities: PiiModelEntity[] = [];
     for (let index = 0; index < chunks.length; index += 1) {
       const chunk = chunks[index];

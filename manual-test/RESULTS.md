@@ -11,6 +11,7 @@
 
 | Section | Result (Pass/Fail/Blocked) | Notes, screenshots, console errors |
 |---|---|---|
+| 0. WebMCP discovery, handoff, approval |  |  |
 | 1. Conversion and counters |  |  |
 | 2. Insights and references |  |  |
 | 3. Clipboard and exports |  |  |

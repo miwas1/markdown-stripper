@@ -1,6 +1,11 @@
 {
   "name": "MarkDown Stripper",
-  "description": "Convert Markdown and documents into plain, readable, or AI-ready text with local OCR, privacy scanning, semantic insights, reference resolution, and fast export.",
+  "description": "Prepare Markdown and documents for people and browser agents with local conversion, OCR, privacy review, AI-ready output, reference resolution, and WebMCP tools.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "WebMCP agent-assisted document handoff",
+    "Local Markdown and document conversion",
+    "Browser OCR and privacy review",
+    "Human-approved redaction and export"
+  ]
 }

@@ -19,6 +19,14 @@ MarkDown Stripper converts GitHub Flavored Markdown (GFM), CommonMark, LLM outpu
 - **Drag & Drop**: Native file input and drag-and-drop support for Markdown, documents, and images.
 - **URL Parameter Sharing**: Supports pre-filling text via URL query parameters (`?text=...` or `?sample=chatgpt`).
 
+## WebMCP agent workflow
+- The top-level page registers 14 imperative WebMCP tools when `document.modelContext` is available.
+- The handoff remains review-first: a person must approve the exact reviewed version in Insights before agent copy/export tools can run.
+- Read tools expose bounded document state, converted output, extracted assets, privacy findings, and a content-free handoff readiness checklist.
+- Write tools can set content/options, prepare an AI-ready handoff, start local privacy scanning, redact reviewed findings, copy/download output, insert the sample, and clear the editor.
+- Agents work with the same visible page state as the human. Content-bearing tool results are bounded and marked untrusted; conversion, OCR, scanning, and redaction remain local to the browser.
+- Suggested prompt: “Prepare this document for an agent handoff, check readiness, and tell me what I should review. Do not share or export anything until I approve it.”
+
 ## Syntax Handled
 - Headings: `# H1` through `###### H6` -> plain title text
 - Emphasis: `**bold**`, `__bold__`, `*italic*`, `_italic_`, `~~strikethrough~~` -> plain text

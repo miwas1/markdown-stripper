@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { convertDocument } from './converter';
 import { detectOcrLanguage } from './language';
-import { mergeSafetyFindings, modelEntitiesToFindings, resolveModelEntitySpans } from './pii';
+import { makeTokenAwareChunks, mergeSafetyFindings, modelEntitiesToFindings, resolveModelEntitySpans } from './pii';
 import { extractSemanticSegments } from './semantic';
-import { redactFindings, scanDocument } from './scanner';
+import { redactFindings, redactFindingsSafely, scanDocument } from './scanner';
+import { summarizeAgentHandoff } from './handoff';
 
 test('resolves inline and reference links in first-use order', () => {
   const source = `# Notes
@@ -56,6 +57,95 @@ test('scanner detects and redacts secrets, private data, and injection text', ()
   const redacted = redactFindings(source, findings, selected);
   assert.doesNotMatch(redacted, /a@b\.com|sk-proj-/);
   assert.match(redacted, /\[EMAIL_1\]/);
+});
+
+test('scanner covers validated financial data, identity data, and additional credential formats', () => {
+  const source = [
+    'Card 4111 1111 1111 1111',
+    'IBAN GB82 WEST 1234 5698 7654 32',
+    'SSN 123-45-6789',
+    'Authorization: Bearer abcdefghijklmnopqrstuvwxyz',
+    'Database postgresql://alice:not-a-real-password@db.example.test/app',
+    'IPv6 2001:db8::1',
+  ].join('\n');
+  const findings = scanDocument(source);
+
+  assert.ok(findings.some(finding => finding.placeholder === 'PAYMENT_CARD'));
+  assert.ok(findings.some(finding => finding.placeholder === 'IBAN'));
+  assert.ok(findings.some(finding => finding.placeholder === 'IDENTITY_DATA'));
+  assert.ok(findings.some(finding => finding.value === 'abcdefghijklmnopqrstuvwxyz'));
+  assert.ok(findings.some(finding => finding.placeholder === 'CONNECTION_STRING'));
+  assert.ok(findings.some(finding => finding.value === '2001:db8::1'));
+
+  const invalid = scanDocument('Invalid card 4111 1111 1111 1112 and IBAN GB82 WEST 1234 5698 7654 31.');
+  assert.ok(!invalid.some(finding => finding.placeholder === 'PAYMENT_CARD'));
+  assert.ok(!invalid.some(finding => finding.placeholder === 'IBAN'));
+});
+
+test('scanner detects compatibility and invisible-character obfuscation with raw redaction offsets', () => {
+  const source = 'Token ｓｋ－ｐｒｏｊ－abcdefghijklmn\u200bopqrstuvwxyz1234';
+  const findings = scanDocument(source);
+  const secret = findings.find(finding => finding.type === 'secret');
+  assert.ok(secret);
+  assert.equal(secret.value, 'ｓｋ－ｐｒｏｊ－abcdefghijklmn\u200bopqrstuvwxyz1234');
+
+  const result = redactFindingsSafely(source, findings, new Set([secret.id]));
+  assert.equal(result.staleIds.length, 0);
+  assert.equal(result.text, 'Token [SECRET_1]');
+});
+
+test('redaction is atomic when findings belong to an older document revision', () => {
+  const source = 'Email ada@example.com.';
+  const findings = scanDocument(source);
+  const changed = `Preface. ${source}`;
+  const result = redactFindingsSafely(changed, findings, new Set(findings.map(finding => finding.id)));
+
+  assert.equal(result.text, changed);
+  assert.deepEqual(result.redactedIds, []);
+  assert.equal(result.staleIds.length, findings.length);
+});
+
+test('redaction aliases repeated values consistently and numbers them left to right', () => {
+  const source = 'ada@example.com met grace@example.com, then emailed ada@example.com.';
+  const findings = scanDocument(source).filter(finding => finding.placeholder === 'EMAIL');
+  const result = redactFindingsSafely(source, findings, new Set(findings.map(finding => finding.id)));
+
+  assert.equal(result.text, '[EMAIL_1] met [EMAIL_2], then emailed [EMAIL_1].');
+  assert.equal(result.redactedIds.length, 3);
+});
+
+test('redaction coalesces overlaps and uses the most sensitive placeholder', () => {
+  const source = 'ada@example.com';
+  const email = scanDocument(source)[0];
+  const secret = {
+    ...email,
+    id: 'synthetic-secret',
+    type: 'secret' as const,
+    severity: 'high' as const,
+    placeholder: 'SECRET',
+    start: 4,
+    value: 'example.com',
+  };
+  const result = redactFindingsSafely(source, [email, secret], new Set([email.id, secret.id]));
+
+  assert.equal(result.text, '[SECRET_1]');
+  assert.deepEqual(new Set(result.redactedIds), new Set([email.id, secret.id]));
+  assert.deepEqual(result.overlapMergedIds, [secret.id]);
+});
+
+test('deep-scan chunks stay inside the token budget with overlap and full coverage', () => {
+  const source = Array.from({ length: 120 }, (_, index) => `word${index}`).join(' ');
+  const countTokens = (value: string) => value.trim() ? value.trim().split(/\s+/).length + 2 : 2;
+  const chunks = makeTokenAwareChunks(source, 18, 5, countTokens);
+
+  assert.ok(chunks.length > 1);
+  assert.equal(chunks[0].offset, 0);
+  assert.equal(chunks.at(-1)!.offset + chunks.at(-1)!.text.length, source.length);
+  assert.ok(chunks.every(chunk => chunk.tokenCount <= 18));
+  for (let index = 1; index < chunks.length; index += 1) {
+    const previousEnd = chunks[index - 1].offset + chunks[index - 1].text.length;
+    assert.ok(chunks[index].offset < previousEnd);
+  }
 });
 
 test('model PII spans use the same local review and redaction flow', () => {
@@ -134,4 +224,47 @@ test('language detection gives a safe OCR default and semantic segmentation igno
   const segments = extractSemanticSegments('Short.\n\nThis is a substantial paragraph that should be compared with another paragraph because it contains enough context for semantic analysis.\n\n```js\nconst ignored = true;\n```');
   assert.equal(segments.length, 1);
   assert.match(segments[0].text, /substantial paragraph/);
+});
+
+test('agent handoff readiness stays review-first and content-free', () => {
+  const source = 'Share this **draft** with the team.';
+  const conversion = convertDocument(source, { mode: 'readable', appendReferences: true });
+  const findings = scanDocument('Share with ada@example.com.');
+  const summary = summarizeAgentHandoff({
+    markdown: source,
+    plainText: conversion.text,
+    conversionMode: 'readable',
+    appendReferences: true,
+    references: conversion.references,
+    brokenReferences: conversion.brokenReferences,
+    safetyFindings: findings,
+    deepScanStatus: 'idle',
+    importWarnings: [],
+    humanApprovalGranted: false,
+  });
+
+  assert.equal(summary.readiness, 'review');
+  assert.equal(summary.agentHandoffReady, false);
+  assert.equal(summary.privacy.findingCount, 1);
+  assert.equal('text' in summary, false);
+  assert.ok(summary.nextSteps.some(step => /deep local privacy scan/i.test(step)));
+
+  const cleanConversion = convertDocument(source, { mode: 'ai', appendReferences: true });
+  const cleanInput = {
+    markdown: source,
+    plainText: cleanConversion.text,
+    conversionMode: 'ai' as const,
+    appendReferences: true,
+    references: cleanConversion.references,
+    brokenReferences: cleanConversion.brokenReferences,
+    safetyFindings: [],
+    deepScanStatus: 'complete' as const,
+    importWarnings: [],
+  };
+  const awaitingApproval = summarizeAgentHandoff({ ...cleanInput, humanApprovalGranted: false });
+  assert.equal(awaitingApproval.contentChecksPass, true);
+  assert.equal(awaitingApproval.readiness, 'review');
+  const approved = summarizeAgentHandoff({ ...cleanInput, humanApprovalGranted: true });
+  assert.equal(approved.readiness, 'ready');
+  assert.equal(approved.agentHandoffReady, true);
 });

@@ -3,7 +3,14 @@ MANUAL SAFETY TEST — ALL VALUES ARE FICTIONAL AND INVALID
 Email: qa.person@example.test
 Phone: +1 202-555-0147
 IP address: 192.0.2.44
+IPv6 address: 2001:db8::44
+MAC address: 02:00:5e:10:00:00
+Checksum-valid fictional card test value: 4111 1111 1111 1111
+Checksum-valid fictional IBAN test value: GB82 WEST 1234 5698 7654 32
+Fictional SSN-shaped value: 123-45-6789
 Fake API token: sk-proj-THIS_IS_NOT_A_REAL_TOKEN_1234567890
+Fake assigned credential: password=THIS-IS-NOT-A-REAL-PASSWORD
+Fake database URL: postgresql://qa:not-a-real-password@db.example.test/app
 Fake JWT: eyJhbGciOiJub25lIn0.eyJzdWIiOiJmaWN0aW9uYWwtdGVzdC11c2VyIn0.ZmFrZS1zaWduYXR1cmU
 
 <!-- HIDDEN QA COMMENT: verify comment detection -->

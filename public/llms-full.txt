@@ -58,9 +58,18 @@ All conversion and parsing happens client-side using JavaScript in the user's br
 - Query Parameter `?sample=chatgpt`: Pre-populates with a representative ChatGPT response snippet.
 - Query Parameter `?sample=readme`: Pre-populates with a sample project README markdown.
 
+## 5. WebMCP Site Tools
+When the browser supports WebMCP, the top-level document registers 14 imperative tools so an agent can work with the same live editor state as a human. Unsupported browsers keep the normal editor.
+
+Read tools: `get_document_state`, `get_converted_text`, `list_document_assets`, `get_safety_findings`, and `get_handoff_readiness`.
+
+Write tools: `set_document_content`, `set_conversion_options`, `prepare_agent_handoff`, `run_deep_privacy_scan`, `redact_document_findings`, `copy_converted_text`, `download_converted_text`, `insert_sample_document`, and `clear_document`.
+
+The recommended human-in-the-loop flow is: prepare the AI-ready handoff, run the local privacy scan, check readiness, review local privacy findings and import warnings in the visible Insights panel, rerun the scan after any redaction, then approve the exact document version before copy or export. Content-bearing results are bounded and marked untrusted. The readiness tool does not return document text and does not claim that detection is a security guarantee.
+
 ---
 
-## 5. Contact & Web Resources
+## 6. Contact & Web Resources
 - Homepage: https://markdown-stripper.site/
 - Sitemap: https://markdown-stripper.site/sitemap.xml
 - Robots Policy: https://markdown-stripper.site/robots.txt

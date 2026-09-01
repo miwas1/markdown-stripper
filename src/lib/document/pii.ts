@@ -1,4 +1,5 @@
 import type { SafetyFinding, SafetyFindingType, SafetySeverity } from './types';
+import { documentFingerprint } from './privacy-utils';
 
 export const PII_MODEL_ID = 'onnx-community/bert-small-pii-detection-ONNX';
 export const PII_MODEL_REVISION = '6cb4e77c2b2c7f81e731b88cffa9b7a6fc675a4c';
@@ -132,6 +133,74 @@ interface TokenGroup {
   tokens: PiiModelEntity[];
 }
 
+export interface PiiTextChunk {
+  text: string;
+  offset: number;
+  tokenCount: number;
+}
+
+/**
+ * Split by the tokenizer's real token count so the pipeline cannot silently
+ * truncate the middle of a large character-based chunk.
+ */
+export function makeTokenAwareChunks(
+  text: string,
+  tokenBudget: number,
+  overlapTokens: number,
+  countTokens: (value: string) => number,
+): PiiTextChunk[] {
+  if (!text) return [];
+  const budget = Math.max(8, Math.floor(tokenBudget));
+  const overlap = Math.max(0, Math.min(Math.floor(overlapTokens), budget - 1));
+  const chunks: PiiTextChunk[] = [];
+  let start = 0;
+
+  while (start < text.length) {
+    let low = start + 1;
+    let high = text.length;
+    let end = start + 1;
+    while (low <= high) {
+      const middle = low + ((high - low) >>> 1);
+      if (countTokens(text.slice(start, middle)) <= budget) {
+        end = middle;
+        low = middle + 1;
+      } else {
+        high = middle - 1;
+      }
+    }
+
+    if (end < text.length) {
+      const minimumBoundary = start + Math.floor((end - start) * 0.7);
+      const newline = text.lastIndexOf('\n', end - 1);
+      const space = text.lastIndexOf(' ', end - 1);
+      const boundary = Math.max(newline, space);
+      if (boundary >= minimumBoundary) end = boundary + 1;
+    }
+
+    const chunkText = text.slice(start, end);
+    chunks.push({ text: chunkText, offset: start, tokenCount: countTokens(chunkText) });
+    if (end >= text.length) break;
+
+    let nextStart = end;
+    if (overlap > 0) {
+      low = start + 1;
+      high = end - 1;
+      while (low <= high) {
+        const middle = low + ((high - low) >>> 1);
+        if (countTokens(text.slice(middle, end)) <= overlap) {
+          nextStart = middle;
+          high = middle - 1;
+        } else {
+          low = middle + 1;
+        }
+      }
+    }
+    start = Math.max(start + 1, nextStart);
+  }
+
+  return chunks;
+}
+
 function splitBioLabel(rawLabel: string): { prefix: string; label: string } {
   const match = /^([BIES])-([\s\S]+)$/i.exec(rawLabel);
   return match ? { prefix: match[1].toUpperCase(), label: match[2] } : { prefix: 'S', label: rawLabel };
@@ -234,6 +303,7 @@ export function resolveModelEntitySpans(source: string, entities: PiiModelEntity
 /** Convert model spans into the scanner's review/redaction format. */
 export function modelEntitiesToFindings(source: string, entities: PiiModelEntity[]): SafetyFinding[] {
   const lineStarts = buildLineStarts(source);
+  const fingerprint = documentFingerprint(source);
   const candidates: SafetyFinding[] = [];
 
   for (const entity of resolveModelEntitySpans(source, entities)) {
@@ -248,6 +318,7 @@ export function modelEntitiesToFindings(source: string, entities: PiiModelEntity
     if (!presentation) continue;
     candidates.push({
       id: `local-ai-${start}-${end}-${normalizeLabel(rawLabel)}`,
+      documentFingerprint: fingerprint,
       ...presentation,
       value,
       start,
@@ -272,8 +343,15 @@ export function modelEntitiesToFindings(source: string, entities: PiiModelEntity
 }
 
 /** Deterministic matches win when both scanners identify the same text. */
-export function mergeSafetyFindings(ruleFindings: SafetyFinding[], modelFindings: SafetyFinding[]): SafetyFinding[] {
-  const additional = modelFindings.filter(modelFinding => !ruleFindings.some(ruleFinding => {
+export function mergeSafetyFindings(
+  ruleFindings: SafetyFinding[],
+  modelFindings: SafetyFinding[],
+  expectedFingerprint?: string,
+): SafetyFinding[] {
+  const currentModelFindings = expectedFingerprint
+    ? modelFindings.filter(finding => finding.documentFingerprint === expectedFingerprint)
+    : modelFindings;
+  const additional = currentModelFindings.filter(modelFinding => !ruleFindings.some(ruleFinding => {
     const overlap = overlapLength(modelFinding, ruleFinding);
     const shorter = Math.min(modelFinding.end - modelFinding.start, ruleFinding.end - ruleFinding.start);
     return overlap > 0 && overlap / shorter >= 0.6;

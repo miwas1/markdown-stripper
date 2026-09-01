@@ -12,7 +12,8 @@ import { SeoFooter } from './components/SeoFooter';
 import { installButtonTracking, sizeBucket, trackEvent } from './lib/analytics';
 import { convertDocument } from './lib/document/converter';
 import { importDocument } from './lib/document/importer';
-import { redactFindings, scanDocument } from './lib/document/scanner';
+import { redactFindingsSafely, scanDocument } from './lib/document/scanner';
+import { documentFingerprint } from './lib/document/privacy-utils';
 import {
   mergeSafetyFindings,
   modelEntitiesToFindings,
@@ -36,6 +37,7 @@ import {
   type SemanticStatus,
   type SemanticWorkerMessage,
 } from './lib/document/semantic';
+import { summarizeAgentHandoff, type AgentHandoffSummary } from './lib/document/handoff';
 import type { ConversionMode, DocumentReference, SafetyFinding } from './lib/document/types';
 import type { OcrSource } from './lib/document/types';
 import {
@@ -54,11 +56,54 @@ interface ExtractedAsset {
   label?: string;
 }
 
+function extractAssets(markdown: string, references: DocumentReference[]): ExtractedAsset[] {
+  const found: ExtractedAsset[] = references.map(reference => ({
+    type: reference.kind === 'image' ? 'image' : 'link',
+    value: reference.url,
+    label: reference.label,
+  }));
+  let match: RegExpExecArray | null;
+
+  const bareUrlRegex = /(?<!["'\(])(https?:\/\/[^\s\)\>]+)(?![^<]*>)/g;
+  while ((match = bareUrlRegex.exec(markdown)) !== null) {
+    if (!found.some(asset => asset.value === match![1])) found.push({ type: 'link', value: match[1] });
+  }
+
+  const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+  while ((match = emailRegex.exec(markdown)) !== null) found.push({ type: 'email', value: match[1] });
+
+  return found;
+}
+
 const CONVERSION_MODES: Array<{ id: ConversionMode; label: string; description: string }> = [
   { id: 'plain', label: 'Plain', description: 'Maximum cleanup' },
   { id: 'readable', label: 'Readable', description: 'Preserve useful structure' },
   { id: 'ai', label: 'AI-ready', description: 'Safe structured context' },
 ];
+
+const WEBMCP_TOOL_COUNT = 14;
+
+const SAMPLE_MARKDOWN = `# Sample Markdown Document
+
+This sample exercises common Markdown syntax and local document insights.
+
+## Extractor Demo
+- Email: contact@example.com
+- Link: [Visit the project](https://markdown-stripper.site)
+- Image: ![Logo](https://raw.githubusercontent.com/lucide-react/lucide/main/icons/file-text.svg)
+
+## Lists & Highlights
+- Feature A: **Instant conversion**
+- Feature B: *Client-side privacy*
+  - Sub-feature: Word & character counter
+
+### Blockquotes & Code
+> "Markdown is a lightweight markup language designed for formatting readability."
+
+\`\`\`javascript
+const result = convertDocument(text, { mode: 'readable' });
+\`\`\`
+`;
 
 function isConversionMode(value: unknown): value is ConversionMode {
   return value === 'plain' || value === 'readable' || value === 'ai';
@@ -77,15 +122,73 @@ interface WebMCPRuntime {
   safetyFindings: SafetyFinding[];
   deepScanStatus: DeepScanStatus;
   semanticStatus: SemanticStatus;
+  handoffSummary: AgentHandoffSummary;
+  handoffApproved: boolean;
   replaceMarkdown: (value: string) => void;
   setConversionMode: (value: ConversionMode) => void;
   setAppendReferences: React.Dispatch<React.SetStateAction<boolean>>;
+  setHandoffApproved: React.Dispatch<React.SetStateAction<boolean>>;
+  approveHandoff: () => boolean;
   handleCopy: () => Promise<boolean>;
   handleExportText: () => void;
-  handleDeepScan: () => void;
+  handleDeepScan: () => boolean;
   handleClear: () => void;
   insertSample: () => void;
   setShowAssets: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+function updateWebMcpConversion(runtime: WebMCPRuntime, mode: ConversionMode, appendReferences: boolean): void {
+  const nextConversion = convertDocument(runtime.markdown, { mode, appendReferences });
+  runtime.handoffApproved = false;
+  runtime.setHandoffApproved(false);
+  runtime.conversionMode = mode;
+  runtime.appendReferences = appendReferences;
+  runtime.plainText = nextConversion.text;
+  runtime.references = nextConversion.references;
+  runtime.brokenReferences = nextConversion.brokenReferences;
+  runtime.handoffSummary = summarizeAgentHandoff({
+    markdown: runtime.markdown,
+    plainText: runtime.plainText,
+    conversionMode: runtime.conversionMode,
+    appendReferences: runtime.appendReferences,
+    references: runtime.references,
+    brokenReferences: runtime.brokenReferences,
+    safetyFindings: runtime.safetyFindings,
+    deepScanStatus: runtime.deepScanStatus,
+    importWarnings: runtime.importWarnings,
+    humanApprovalGranted: runtime.handoffApproved,
+  });
+}
+
+function syncWebMcpDocument(runtime: WebMCPRuntime, markdown: string): void {
+  const nextConversion = convertDocument(markdown, {
+    mode: runtime.conversionMode,
+    appendReferences: runtime.appendReferences,
+  });
+  runtime.markdown = markdown;
+  runtime.importedFileName = null;
+  runtime.importWarnings = [];
+  runtime.assets = extractAssets(markdown, nextConversion.references);
+  runtime.safetyFindings = scanDocument(markdown);
+  runtime.deepScanStatus = 'idle';
+  runtime.semanticStatus = 'idle';
+  runtime.handoffApproved = false;
+  runtime.setHandoffApproved(false);
+  runtime.plainText = nextConversion.text;
+  runtime.references = nextConversion.references;
+  runtime.brokenReferences = nextConversion.brokenReferences;
+  runtime.handoffSummary = summarizeAgentHandoff({
+    markdown: runtime.markdown,
+    plainText: runtime.plainText,
+    conversionMode: runtime.conversionMode,
+    appendReferences: runtime.appendReferences,
+    references: runtime.references,
+    brokenReferences: runtime.brokenReferences,
+    safetyFindings: runtime.safetyFindings,
+    deepScanStatus: runtime.deepScanStatus,
+    importWarnings: runtime.importWarnings,
+    humanApprovalGranted: runtime.handoffApproved,
+  });
 }
 
 export default function App() {
@@ -125,10 +228,12 @@ export default function App() {
   const [semanticRuntime, setSemanticRuntime] = useState<SemanticRuntime | null>(null);
   const [semanticModelReady, setSemanticModelReady] = useState(false);
   const [webMcpStatus, setWebMcpStatus] = useState<'checking' | 'ready' | 'unsupported' | 'error'>('checking');
+  const [handoffApproved, setHandoffApproved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const deepWorkerRef = useRef<Worker | null>(null);
   const deepRequestIdRef = useRef(0);
   const deepSourceRef = useRef<{ requestId: number; text: string } | null>(null);
+  const deepSignalCleanupRef = useRef<(() => void) | null>(null);
   const lastDeepScannedTextRef = useRef<string | null>(null);
   const markdownRef = useRef(markdown);
   const ocrWorkerRef = useRef<Worker | null>(null);
@@ -145,15 +250,48 @@ export default function App() {
     [markdown, conversionMode, appendReferences],
   );
   const plainText = conversion.text;
+  const deferredFingerprint = useMemo(() => documentFingerprint(deferredMarkdown), [deferredMarkdown]);
   const quickSafetyFindings = useMemo(() => scanDocument(deferredMarkdown), [deferredMarkdown]);
   const safetyFindings = useMemo(
-    () => mergeSafetyFindings(quickSafetyFindings, deepScanFindings),
-    [quickSafetyFindings, deepScanFindings],
+    () => mergeSafetyFindings(quickSafetyFindings, deepScanFindings, deferredFingerprint),
+    [quickSafetyFindings, deepScanFindings, deferredFingerprint],
   );
+  const handoffSummary = useMemo(
+    () => summarizeAgentHandoff({
+      markdown,
+      plainText,
+      conversionMode,
+      appendReferences,
+      references: conversion.references,
+      brokenReferences: conversion.brokenReferences,
+      safetyFindings,
+      deepScanStatus,
+      importWarnings,
+      humanApprovalGranted: handoffApproved,
+    }),
+    [
+      markdown,
+      plainText,
+      conversionMode,
+      appendReferences,
+      conversion.references,
+      conversion.brokenReferences,
+      safetyFindings,
+      deepScanStatus,
+      importWarnings,
+      handoffApproved,
+    ],
+  );
+
+  // Approval belongs to this exact document/check state. Any content, option,
+  // or privacy-scan change requires the person to review and approve again.
+  useEffect(() => {
+    setHandoffApproved(false);
+  }, [markdown, conversionMode, appendReferences, safetyFindings, deepScanStatus, importWarnings]);
 
   // Set document title & track page view invisibly on mount, handle query parameters
   useEffect(() => {
-    document.title = "MarkDown Stripper - Free Online Markdown to Plain Text Converter";
+    document.title = "MarkDown Stripper - Private WebMCP Document Handoff";
     
     // Check URL parameters for prefilled text or sample presets
     try {
@@ -215,32 +353,11 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
   }, [plainText, conversionMode]);
 
   // Extract links, images, and emails
-  const assets = useMemo(() => {
-    const found: ExtractedAsset[] = conversion.references.map(reference => ({
-      type: reference.kind === 'image' ? 'image' : 'link',
-      value: reference.url,
-      label: reference.label,
-    }));
-    let match;
-
-    // Bare URLs (approximation)
-    const bareUrlRegex = /(?<!["'\(])(https?:\/\/[^\s\)\>]+)(?![^<]*>)/g;
-    while ((match = bareUrlRegex.exec(markdown)) !== null) {
-      if (!found.some(f => f.value === match![1])) {
-        found.push({ type: 'link', value: match[1] });
-      }
-    }
-
-    // Emails
-    const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
-    while ((match = emailRegex.exec(markdown)) !== null) {
-      found.push({ type: 'email', value: match[1] });
-    }
-
-    return found;
-  }, [markdown, conversion.references]);
+  const assets = useMemo(() => extractAssets(markdown, conversion.references), [markdown, conversion.references]);
 
   const cancelDeepScan = useCallback(() => {
+    deepSignalCleanupRef.current?.();
+    deepSignalCleanupRef.current = null;
     deepWorkerRef.current?.terminate();
     deepWorkerRef.current = null;
     deepRequestIdRef.current += 1;
@@ -304,6 +421,8 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
         setDeepScanError(null);
         setDeepModelReady(true);
         lastDeepScannedTextRef.current = active.text;
+        deepSignalCleanupRef.current?.();
+        deepSignalCleanupRef.current = null;
         deepSourceRef.current = null;
         setShowAssets(true);
         trackEvent('privacy_scan_complete', {
@@ -318,6 +437,8 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
       setDeepScanStatus('error');
       setDeepScanProgress(null);
       setDeepScanError('Could not run the deep local scan. Check your connection and available device memory, then retry.');
+      deepSignalCleanupRef.current?.();
+      deepSignalCleanupRef.current = null;
       deepSourceRef.current = null;
     };
     worker.onerror = event => {
@@ -332,6 +453,8 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
       setDeepScanStatus('error');
       setDeepScanProgress(null);
       setDeepScanError('The deep local scanner is not supported on this device or ran out of memory.');
+      deepSignalCleanupRef.current?.();
+      deepSignalCleanupRef.current = null;
       deepSourceRef.current = null;
       worker.terminate();
       deepWorkerRef.current = null;
@@ -562,19 +685,30 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     getSemanticWorker().postMessage({ type: 'semantic', requestId, text: markdown });
   }, [getSemanticWorker, markdown, semanticModelReady, semanticStatus]);
 
-  const handleDeepScan = useCallback(() => {
-    if (!markdown.trim() || deepScanStatus === 'loading' || deepScanStatus === 'scanning') return;
+  const handleDeepScan = useCallback((signal?: AbortSignal) => {
+    const currentMarkdown = markdownRef.current;
+    if (!currentMarkdown.trim() || deepSourceRef.current || signal?.aborted) return false;
     const requestId = deepRequestIdRef.current + 1;
     deepRequestIdRef.current = requestId;
-    deepSourceRef.current = { requestId, text: markdown };
+    deepSourceRef.current = { requestId, text: currentMarkdown };
+    deepSignalCleanupRef.current?.();
+    deepSignalCleanupRef.current = null;
+    if (signal) {
+      const handleAbort = () => {
+        if (deepSourceRef.current?.requestId === requestId) cancelDeepScan();
+      };
+      signal.addEventListener('abort', handleAbort, { once: true });
+      deepSignalCleanupRef.current = () => signal.removeEventListener('abort', handleAbort);
+    }
     setDeepScanFindings([]);
     setSelectedFindingIds(new Set());
     setDeepScanStatus(deepModelReady ? 'scanning' : 'loading');
     setDeepScanProgress(deepModelReady ? 0 : null);
     setDeepScanError(null);
     setShowAssets(true);
-    getDeepWorker().postMessage({ type: 'scan', requestId, text: markdown });
-  }, [deepModelReady, deepScanStatus, getDeepWorker, markdown]);
+    getDeepWorker().postMessage({ type: 'scan', requestId, text: currentMarkdown });
+    return true;
+  }, [cancelDeepScan, deepModelReady, getDeepWorker]);
 
   useEffect(() => {
     markdownRef.current = markdown;
@@ -624,6 +758,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     cancelDeepScan();
     cancelOcr();
     cancelSemanticScan();
+    markdownRef.current = '';
     setMarkdown('');
     setDeepScanFindings([]);
     lastDeepScannedTextRef.current = null;
@@ -650,6 +785,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     cancelDeepScan();
     cancelOcr();
     cancelSemanticScan();
+    markdownRef.current = value;
     setMarkdown(value);
     setImportedFileName(null);
     setImportWarnings([]);
@@ -759,27 +895,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
   };
 
   const insertSample = () => {
-    setMarkdown(`# Sample Markdown Document
-    
-This sample exercises common Markdown syntax and local document insights.
-
-## Extractor Demo
-- Email: contact@example.com
-- Link: [Visit the project](https://markdown-stripper.site)
-- Image: ![Logo](https://raw.githubusercontent.com/lucide-react/lucide/main/icons/file-text.svg)
-
-## Lists & Highlights
-- Feature A: **Instant conversion**
-- Feature B: *Client-side privacy*
-  - Sub-feature: Word & character counter
-
-### Blockquotes & Code
-> "Markdown is a lightweight markup language designed for formatting readability."
-
-\`\`\`javascript
-const result = convertDocument(text, { mode: 'readable' });
-\`\`\`
-`);
+    replaceMarkdown(SAMPLE_MARKDOWN);
   };
 
   const toggleFinding = (id: string) => {
@@ -797,10 +913,25 @@ const result = convertDocument(text, { mode: 'readable' });
 
   const handleRedactSelected = () => {
     if (!selectedFindingIds.size) return;
-    setMarkdown(current => redactFindings(current, safetyFindings, selectedFindingIds));
-    trackEvent('redact_findings', { feature: 'redaction', outcome: 'success' });
+    const result = redactFindingsSafely(markdown, safetyFindings, selectedFindingIds);
+    if (result.staleIds.length) {
+      setError('The document changed after these findings were created. Review the refreshed findings before redacting.');
+      setSelectedFindingIds(new Set());
+      return;
+    }
+    setMarkdown(result.text);
+    trackEvent('redact_findings', {
+      feature: 'redaction',
+      outcome: result.redactedIds.length ? 'success' : 'error',
+    });
     setSelectedFindingIds(new Set());
   };
+
+  const approveHandoff = useCallback(() => {
+    if (!handoffSummary.contentChecksPass) return false;
+    setHandoffApproved(true);
+    return true;
+  }, [handoffSummary.contentChecksPass]);
 
   // Keep the latest React state and actions behind one stable ref. WebMCP
   // registration happens once, while tool calls always see the current page.
@@ -817,9 +948,13 @@ const result = convertDocument(text, { mode: 'readable' });
     safetyFindings,
     deepScanStatus,
     semanticStatus,
+    handoffSummary,
+    handoffApproved,
     replaceMarkdown,
     setConversionMode: value => setConversionMode(value),
     setAppendReferences,
+    setHandoffApproved,
+    approveHandoff,
     handleCopy,
     handleExportText,
     handleDeepScan,
@@ -830,19 +965,22 @@ const result = convertDocument(text, { mode: 'readable' });
 
   useEffect(() => {
     const modelContext = document.modelContext;
-    if (!modelContext) {
+    if (!modelContext || typeof modelContext.registerTool !== 'function') {
       setWebMcpStatus('unsupported');
       return;
     }
 
+    // WebMCP Challenge entrypoint: register the tools on the top-level page
+    // context, while retaining the normal editor when the API is unavailable.
     const controller = new AbortController();
     const getRuntime = () => webMcpRuntimeRef.current;
     const tools: WebMCPTool[] = [
       {
         name: 'get_document_state',
+        title: 'Read document state',
         description: 'Read the current Markdown input, conversion settings, output statistics, sources, and local safety-scan status without changing the document.',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: true, idempotentHint: true, untrustedContentHint: true },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async () => {
           const runtime = getRuntime();
           if (!runtime) return webMcpError('The editor is not ready.');
@@ -865,6 +1003,7 @@ const result = convertDocument(text, { mode: 'readable' });
       },
       {
         name: 'get_converted_text',
+        title: 'Read converted text',
         description: 'Return the current converted plain-text output so an agent can review, summarize, or use it in a follow-up action. The result is bounded to avoid oversized tool responses.',
         inputSchema: {
           type: 'object',
@@ -873,7 +1012,7 @@ const result = convertDocument(text, { mode: 'readable' });
           },
           additionalProperties: false,
         },
-        annotations: { readOnlyHint: true, idempotentHint: true, untrustedContentHint: true },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async input => {
           const runtime = getRuntime();
           if (!runtime) return webMcpError('The editor is not ready.');
@@ -892,6 +1031,7 @@ const result = convertDocument(text, { mode: 'readable' });
       },
       {
         name: 'set_document_content',
+        title: 'Replace document content',
         description: 'Replace the current Markdown document with supplied text. This updates the visible editor and conversion output; it does not upload the document.',
         inputSchema: {
           type: 'object',
@@ -901,18 +1041,25 @@ const result = convertDocument(text, { mode: 'readable' });
           required: ['text'],
           additionalProperties: false,
         },
-        annotations: { readOnlyHint: false, idempotentHint: true },
+        annotations: { readOnlyHint: false },
         execute: async input => {
           const text = stringInput(input, 'text', 200000);
           if (text === null) return webMcpError('text is required and must be a string of at most 200000 characters.');
           const runtime = getRuntime();
           if (!runtime) return webMcpError('The editor is not ready.');
           runtime.replaceMarkdown(text);
-          return webMcpResult({ updated: true, markdownLength: text.length });
+          syncWebMcpDocument(runtime, text);
+          return webMcpResult({
+            updated: true,
+            markdownLength: text.length,
+            outputLength: runtime.plainText.length,
+            safetyFindingCount: runtime.safetyFindings.length,
+          });
         },
       },
       {
         name: 'set_conversion_options',
+        title: 'Set conversion options',
         description: 'Set the conversion mode and whether extracted references are appended to the output. Use plain for maximum cleanup, readable to preserve useful structure, or ai for structured context.',
         inputSchema: {
           type: 'object',
@@ -923,7 +1070,7 @@ const result = convertDocument(text, { mode: 'readable' });
           minProperties: 1,
           additionalProperties: false,
         },
-        annotations: { readOnlyHint: false, idempotentHint: true },
+        annotations: { readOnlyHint: false },
         execute: async input => {
           if (!isRecord(input)) return webMcpError('Provide mode and/or appendReferences.');
           const mode = input.mode;
@@ -933,20 +1080,24 @@ const result = convertDocument(text, { mode: 'readable' });
           if (append !== undefined && typeof append !== 'boolean') return webMcpError('appendReferences must be boolean.');
           const runtime = getRuntime();
           if (!runtime) return webMcpError('The editor is not ready.');
+          const nextMode = mode ?? runtime.conversionMode;
+          const nextAppendReferences = append ?? runtime.appendReferences;
           if (mode !== undefined) runtime.setConversionMode(mode);
           if (append !== undefined) runtime.setAppendReferences(append);
+          updateWebMcpConversion(runtime, nextMode, nextAppendReferences);
           return webMcpResult({
             updated: true,
-            conversionMode: mode ?? runtime.conversionMode,
-            appendReferences: append ?? runtime.appendReferences,
+            conversionMode: nextMode,
+            appendReferences: nextAppendReferences,
           });
         },
       },
       {
         name: 'list_document_assets',
+        title: 'List document assets',
         description: 'List links, images, email addresses, and broken references extracted from the current Markdown document.',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: true, idempotentHint: true, untrustedContentHint: true },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async () => {
           const runtime = getRuntime();
           if (!runtime) return webMcpError('The editor is not ready.');
@@ -955,9 +1106,10 @@ const result = convertDocument(text, { mode: 'readable' });
       },
       {
         name: 'get_safety_findings',
+        title: 'Read privacy findings',
         description: 'Read local safety and privacy findings for the current document. Findings include stable IDs and line numbers that can be passed to redact_document_findings.',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: true, idempotentHint: true, untrustedContentHint: true },
+        annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: async () => {
           const runtime = getRuntime();
           if (!runtime) return webMcpError('The editor is not ready.');
@@ -977,58 +1129,118 @@ const result = convertDocument(text, { mode: 'readable' });
         },
       },
       {
-        name: 'run_deep_privacy_scan',
-        description: 'Start the optional local AI privacy scan. The scan runs in the browser and does not upload document content; call get_safety_findings afterward to read results.',
+        name: 'get_handoff_readiness',
+        title: 'Check agent handoff readiness',
+        description: 'Return a bounded readiness checklist for sharing this document with an agent. It reports conversion, references, import warnings, and local privacy-scan status without returning document text.',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: false, idempotentHint: true },
+        annotations: { readOnlyHint: true },
         execute: async () => {
           const runtime = getRuntime();
           if (!runtime) return webMcpError('The editor is not ready.');
-          if (!runtime.markdown.trim()) return webMcpError('Add document content before running a privacy scan.');
-          runtime.handleDeepScan();
+          return webMcpResult(runtime.handoffSummary);
+        },
+      },
+      {
+        name: 'prepare_agent_handoff',
+        title: 'Prepare agent handoff',
+        description: 'Prepare the visible document for an agent-assisted review by switching to AI-ready mode, optionally appending references, and opening local insights. This never uploads, shares, or redacts document content.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            appendReferences: { type: 'boolean', default: true, description: 'Append extracted references and media to the AI-ready output.' },
+          },
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: false },
+        execute: async input => {
+          if (input !== undefined && !isRecord(input)) return webMcpError('Input must be an object.');
+          const append = isRecord(input) ? input.appendReferences : undefined;
+          if (append !== undefined && typeof append !== 'boolean') return webMcpError('appendReferences must be boolean.');
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          if (!runtime.markdown.trim()) return webMcpError('Add document content before preparing an agent handoff.');
+          runtime.setConversionMode('ai');
+          const nextAppendReferences = typeof append === 'boolean' ? append : true;
+          runtime.setAppendReferences(nextAppendReferences);
+          updateWebMcpConversion(runtime, 'ai', nextAppendReferences);
           runtime.setShowAssets(true);
-          return webMcpResult({ started: true, status: 'loading-or-scanning', privacy: 'local-only' });
+          return webMcpResult({
+            updated: true,
+            conversionMode: 'ai',
+            appendReferences: nextAppendReferences,
+            nextTool: 'get_handoff_readiness',
+            reminder: 'Review local findings in the visible Insights panel before sharing output with an agent.',
+          });
+        },
+      },
+      {
+        name: 'run_deep_privacy_scan',
+        title: 'Run deep privacy scan',
+        description: 'Start the optional local AI privacy scan. The scan runs in the browser and does not upload document content; poll get_document_state or get_handoff_readiness until deepScanStatus is complete, then call get_safety_findings to read results.',
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        annotations: { readOnlyHint: false },
+        execute: async (_input, options) => {
+          const runtime = getRuntime();
+          if (!runtime) return webMcpError('The editor is not ready.');
+          if (!runtime.markdown.trim()) return webMcpError('Add document content before running a privacy scan.');
+          const started = runtime.handleDeepScan(options.signal);
+          const alreadyRunning = runtime.deepScanStatus === 'loading'
+            || runtime.deepScanStatus === 'scanning'
+            || deepSourceRef.current !== null;
+          runtime.setShowAssets(true);
+          return webMcpResult({
+            started,
+            status: started ? 'loading-or-scanning' : alreadyRunning ? 'already-running' : 'not-started',
+            privacy: 'local-only',
+            nextTool: 'get_handoff_readiness',
+          });
         },
       },
       {
         name: 'redact_document_findings',
+        title: 'Redact privacy findings',
         description: 'Replace selected local safety findings with safe placeholders in the visible Markdown editor. This is a document mutation and should be used only after reviewing the finding IDs.',
         inputSchema: {
           type: 'object',
           properties: {
-            findingIds: { type: 'array', items: { type: 'string', maxLength: 100 }, maxItems: 100, description: 'Stable finding IDs returned by get_safety_findings.' },
-            redactAll: { type: 'boolean', description: 'Redact all current findings when true.' },
+            findingIds: { type: 'array', items: { type: 'string', maxLength: 100 }, minItems: 1, maxItems: 100, description: 'Stable finding IDs returned by get_safety_findings after the person has reviewed them.' },
           },
+          required: ['findingIds'],
           additionalProperties: false,
         },
-        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+        annotations: { readOnlyHint: false },
         execute: async input => {
-          if (!isRecord(input)) return webMcpError('Provide findingIds or redactAll.');
+          if (!isRecord(input)) return webMcpError('Provide findingIds from get_safety_findings after reviewing them.');
           const runtime = getRuntime();
           if (!runtime) return webMcpError('The editor is not ready.');
-          const redactAll = input.redactAll;
-          if (redactAll !== undefined && typeof redactAll !== 'boolean') return webMcpError('redactAll must be boolean.');
-          const ids = input.findingIds === undefined ? [] : stringArrayInput(input, 'findingIds', 100, 100);
-          if (ids === null) return webMcpError('findingIds must be an array of at most 100 strings.');
-          const selected = redactAll ? runtime.safetyFindings.map(finding => finding.id) : ids;
-          if (!selected.length) return webMcpError('No finding IDs were provided and no findings are available.');
+          const selected = stringArrayInput(input, 'findingIds', 100, 100);
+          if (selected === null || !selected.length) return webMcpError('findingIds must be a non-empty array of at most 100 strings.');
           const known = new Set(runtime.safetyFindings.map(finding => finding.id));
           const unknown = selected.filter(id => !known.has(id));
           if (unknown.length) return webMcpError(`Unknown finding ID: ${unknown[0]}`);
-          const redacted = redactFindings(runtime.markdown, runtime.safetyFindings, new Set(selected));
-          runtime.replaceMarkdown(redacted);
-          return webMcpResult({ redacted: selected.length, updated: true });
+          const result = redactFindingsSafely(runtime.markdown, runtime.safetyFindings, new Set(selected));
+          if (result.staleIds.length) return webMcpError('The document changed after these findings were produced. Read the refreshed findings and try again.');
+          runtime.replaceMarkdown(result.text);
+          syncWebMcpDocument(runtime, result.text);
+          return webMcpResult({
+            redacted: result.redactedIds.length,
+            overlapMerged: result.overlapMergedIds.length,
+            updated: true,
+            remainingFindingCount: runtime.safetyFindings.length,
+          });
         },
       },
       {
         name: 'copy_converted_text',
-        description: 'Copy the current converted output to the user’s clipboard using the same visible Copy action as the human UI.',
+        title: 'Copy converted text',
+        description: 'After the person approves the current handoff in Insights, copy the converted output to the user’s clipboard using the same visible Copy action as the human UI.',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: false, idempotentHint: true },
+        annotations: { readOnlyHint: false },
         execute: async () => {
           const runtime = getRuntime();
           if (!runtime) return webMcpError('The editor is not ready.');
           if (!runtime.plainText) return webMcpError('There is no converted output to copy.');
+          if (!runtime.handoffApproved) return webMcpError('Human approval is required in the Insights panel before an agent can copy this document.');
           const copied = await runtime.handleCopy();
           if (!copied) return webMcpError('The browser did not allow clipboard access.');
           return webMcpResult({ copied: true, characters: runtime.plainText.length });
@@ -1036,39 +1248,45 @@ const result = convertDocument(text, { mode: 'readable' });
       },
       {
         name: 'download_converted_text',
-        description: 'Download the current converted output as a local .txt file using the app’s visible export action.',
+        title: 'Download converted text',
+        description: 'After the person approves the current handoff in Insights, download the converted output as a local .txt file using the app’s visible export action.',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: false, idempotentHint: true },
+        annotations: { readOnlyHint: false },
         execute: async () => {
           const runtime = getRuntime();
           if (!runtime) return webMcpError('The editor is not ready.');
           if (!runtime.plainText) return webMcpError('There is no converted output to download.');
+          if (!runtime.handoffApproved) return webMcpError('Human approval is required in the Insights panel before an agent can export this document.');
           runtime.handleExportText();
           return webMcpResult({ downloadStarted: true, filename: 'converted-text.txt' });
         },
       },
       {
         name: 'clear_document',
+        title: 'Clear document',
         description: 'Clear the current document, scan results, imported-file state, and conversion output from the visible editor.',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+        annotations: { readOnlyHint: false },
         execute: async () => {
           const runtime = getRuntime();
           if (!runtime) return webMcpError('The editor is not ready.');
           runtime.handleClear();
+          syncWebMcpDocument(runtime, '');
           return webMcpResult({ cleared: true });
         },
       },
       {
         name: 'insert_sample_document',
+        title: 'Insert sample document',
         description: 'Insert the app’s sample Markdown document to demonstrate conversion, references, assets, and safety insights.',
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: false, idempotentHint: true },
+        annotations: { readOnlyHint: false },
         execute: async () => {
           const runtime = getRuntime();
           if (!runtime) return webMcpError('The editor is not ready.');
           runtime.insertSample();
-          return webMcpResult({ inserted: true });
+          syncWebMcpDocument(runtime, SAMPLE_MARKDOWN);
+          return webMcpResult({ inserted: true, markdownLength: SAMPLE_MARKDOWN.length });
         },
       },
     ];
@@ -1076,7 +1294,7 @@ const result = convertDocument(text, { mode: 'readable' });
     const registerTools = async () => {
       const results = await Promise.all(tools.map(async tool => {
         try {
-          await modelContext.registerTool(tool, { signal: controller.signal });
+          await document.modelContext!.registerTool(tool, { signal: controller.signal });
           return true;
         } catch (error) {
           if (!controller.signal.aborted) console.warn(`WebMCP tool registration failed for ${tool.name}:`, error);
@@ -1118,7 +1336,7 @@ const result = convertDocument(text, { mode: 'readable' });
               </div>
               <div>
                 <h1 className="text-base sm:text-lg font-bold tracking-tight text-zinc-900 leading-tight">MarkDown Stripper</h1>
-                <p className="text-[10px] text-zinc-400 font-medium hidden sm:block">Markdown to Plain Text Converter</p>
+                <p className="text-[10px] text-zinc-400 font-medium hidden sm:block">Private document handoff for people + agents</p>
               </div>
             </div>
 
@@ -1281,6 +1499,52 @@ const result = convertDocument(text, { mode: 'readable' });
       <div className="flex-1 relative">
         <main className={`transition-all duration-300 ease-in-out px-3 sm:px-6 lg:px-8 py-4 sm:py-8 ${showAssets ? 'lg:mr-96' : ''}`}>
           <div className="max-w-7xl mx-auto space-y-4">
+
+            {/* Judge-facing WebMCP workflow cue */}
+            <section id="webmcp-workflow" className="relative overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-950 via-indigo-900 to-violet-900 px-4 py-5 text-white shadow-lg shadow-indigo-100 sm:px-6 sm:py-6">
+              <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-violet-400/20 blur-3xl" />
+              <div className="relative grid gap-5 lg:grid-cols-[1.15fr_1fr] lg:items-center">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-200">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-2.5 py-1">
+                      <Bot className="h-3.5 w-3.5" />
+                      Human + agent workflow
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2.5 py-1" aria-live="polite">
+                      <span className={`h-1.5 w-1.5 rounded-full ${webMcpStatus === 'ready' ? 'bg-emerald-300' : 'bg-indigo-300'}`} />
+                      {webMcpStatus === 'ready' ? `${WEBMCP_TOOL_COUNT} tools ready` : 'WebMCP progressive enhancement'}
+                    </span>
+                  </div>
+                  <h2 className="mt-3 max-w-xl text-xl font-bold tracking-tight sm:text-2xl">Turn messy documents into context an agent can use safely.</h2>
+                  <p className="mt-2 max-w-2xl text-xs leading-relaxed text-indigo-100 sm:text-sm">
+                    You import and review the document. An agent can inspect the same live editor, prepare AI-ready output, surface local privacy findings, and hand the final decision back to you.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowAssets(true)}
+                    className="mt-4 inline-flex min-h-[40px] items-center gap-2 rounded-xl bg-white px-3.5 py-2 text-xs font-bold text-indigo-900 transition-colors hover:bg-indigo-50"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Open local insights
+                  </button>
+                </div>
+
+                <div className="rounded-2xl border border-white/15 bg-white/10 p-3.5 backdrop-blur-sm sm:p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-indigo-200">Try in ChatGPT’s in-app browser</p>
+                  <p className="mt-2 rounded-xl border border-white/10 bg-black/10 px-3 py-2.5 font-mono text-[11px] leading-relaxed text-white sm:text-xs">
+                    “Prepare this document for an agent handoff, check readiness, and tell me what I should review.”
+                  </p>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] text-indigo-100">
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-2.5"><span className="font-black text-white">1</span><br />Inspect</div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-2.5"><span className="font-black text-white">2</span><br />Protect</div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-2.5"><span className="font-black text-white">3</span><br />Export</div>
+                  </div>
+                  <p className="mt-3 text-[10px] leading-relaxed text-indigo-200" aria-live="polite">
+                    Current page: <span className="font-bold text-white">{handoffSummary.headline}</span>
+                  </p>
+                </div>
+              </div>
+            </section>
 
             {/* Purpose-aware conversion controls */}
             <section className="bg-white border border-zinc-200 rounded-2xl p-2 sm:p-3 shadow-sm flex flex-col lg:flex-row lg:items-center gap-2 sm:gap-3">
@@ -1628,6 +1892,65 @@ const result = convertDocument(text, { mode: 'readable' });
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-6 space-y-6 scrollbar-thin scrollbar-thumb-zinc-200">
+                  {/* Shared human/agent handoff status */}
+                  <div className={`rounded-2xl border p-3.5 space-y-3 ${
+                    handoffSummary.readiness === 'ready'
+                      ? 'border-emerald-200 bg-emerald-50/70'
+                      : handoffSummary.readiness === 'empty'
+                        ? 'border-zinc-200 bg-zinc-50'
+                        : 'border-indigo-200 bg-indigo-50/60'
+                  }`}>
+                    <div className="flex items-start gap-3">
+                      <div className={`w-9 h-9 rounded-xl bg-white border flex items-center justify-center shrink-0 ${
+                        handoffSummary.readiness === 'ready' ? 'border-emerald-200 text-emerald-600' : 'border-indigo-100 text-indigo-600'
+                      }`}>
+                        <Bot className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-zinc-900">Agent handoff</span>
+                          <span className={`text-[9px] uppercase tracking-wide font-black px-1.5 py-0.5 rounded-md ${
+                            handoffSummary.readiness === 'ready'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : handoffSummary.readiness === 'empty'
+                                ? 'bg-zinc-200 text-zinc-600'
+                                : 'bg-indigo-100 text-indigo-700'
+                          }`}>
+                            {handoffSummary.readiness === 'ready' ? 'Ready' : handoffSummary.readiness === 'empty' ? 'Waiting' : 'Review'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-semibold text-zinc-800 mt-1">{handoffSummary.headline}</p>
+                        <p className="text-[10px] text-zinc-500 leading-relaxed mt-1">The agent can work with this page, while you keep the final say over sensitive content.</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-[9px] text-zinc-500">
+                      <div className="rounded-xl border border-white/80 bg-white/70 px-2 py-2"><strong className="block text-zinc-900">{handoffSummary.privacy.findingCount}</strong>findings</div>
+                      <div className="rounded-xl border border-white/80 bg-white/70 px-2 py-2"><strong className="block text-zinc-900">{handoffSummary.document.referenceCount}</strong>references</div>
+                      <div className="rounded-xl border border-white/80 bg-white/70 px-2 py-2"><strong className="block text-zinc-900">{handoffSummary.document.outputMode}</strong>output mode</div>
+                    </div>
+                    {handoffSummary.nextSteps.length > 0 && (
+                      <p className="text-[10px] leading-relaxed text-zinc-600">
+                        <span className="font-bold text-zinc-800">Next:</span> {handoffSummary.nextSteps[0]}
+                      </p>
+                    )}
+                    {handoffSummary.contentChecksPass && !handoffSummary.humanApprovalGranted && (
+                      <button
+                        type="button"
+                        onClick={approveHandoff}
+                        className="w-full min-h-[40px] rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white transition-colors hover:bg-emerald-700"
+                      >
+                        <ShieldCheck className="mr-1.5 inline h-3.5 w-3.5" />
+                        Approve this version for agent export
+                      </button>
+                    )}
+                    {handoffSummary.humanApprovalGranted && (
+                      <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-100/70 px-3 py-2 text-[10px] font-semibold text-emerald-800">
+                        <Check className="h-3.5 w-3.5" />
+                        Approved for this exact document version.
+                      </div>
+                    )}
+                  </div>
+
                   {/* Local safety and privacy scan */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-2">
@@ -1685,21 +2008,21 @@ const result = convertDocument(text, { mode: 'readable' });
                             <strong className="text-zinc-900">Deep scan complete.</strong>{' '}
                             {modelFindingCount ? `${modelFindingCount} additional finding${modelFindingCount === 1 ? '' : 's'}.` : 'No additional PII found.'}
                           </span>
-                          <button data-track-button="deep_scan_repeat" onClick={handleDeepScan} className="font-bold text-indigo-600 hover:text-indigo-800 shrink-0 min-h-[28px]">Scan again</button>
+                          <button data-track-button="deep_scan_repeat" onClick={() => handleDeepScan()} className="font-bold text-indigo-600 hover:text-indigo-800 shrink-0 min-h-[28px]">Scan again</button>
                         </div>
                       )}
 
                       {deepScanStatus === 'error' && (
                         <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2 text-[10px] text-red-700">
                           <p>{deepScanError}</p>
-                          <button data-track-button="deep_scan_retry" onClick={handleDeepScan} className="font-bold mt-1.5 min-h-[28px] hover:text-red-900">Retry deep scan</button>
+                          <button data-track-button="deep_scan_retry" onClick={() => handleDeepScan()} className="font-bold mt-1.5 min-h-[28px] hover:text-red-900">Retry deep scan</button>
                         </div>
                       )}
 
                       {!isDeepScanning && deepScanStatus !== 'complete' && deepScanStatus !== 'error' && (
                         <button
                           data-track-button="deep_scan_run"
-                          onClick={handleDeepScan}
+                          onClick={() => handleDeepScan()}
                           disabled={!markdown.trim()}
                           className="w-full min-h-[40px] rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >

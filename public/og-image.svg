@@ -30,9 +30,9 @@
 
   <!-- Brand Pill -->
   <g transform="translate(100, 80)">
-    <rect width="260" height="42" rx="21" fill="#6366f1" fill-opacity="0.2" stroke="#818cf8" stroke-width="1.5"/>
+    <rect width="310" height="42" rx="21" fill="#6366f1" fill-opacity="0.2" stroke="#818cf8" stroke-width="1.5"/>
     <circle cx="24" cy="21" r="6" fill="#10b981"/>
-    <text x="42" y="27" fill="#e0e7ff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="600" letter-spacing="1">LOCAL-FIRST PROCESSING</text>
+    <text x="42" y="27" fill="#e0e7ff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="600" letter-spacing="1">WEBMCP HUMAN + AGENT WORKFLOW</text>
   </g>
 
   <!-- Main Heading -->
@@ -40,13 +40,13 @@
     MarkDown Stripper
   </text>
   <text x="100" y="250" fill="#a5b4fc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="28" font-weight="500">
-    Free Online Markdown to Clean Plain Text Converter
+    Private Document Handoff for People &amp; Agents
   </text>
 
   <!-- Feature Tags -->
   <g transform="translate(100, 290)">
     <rect x="0" y="0" width="180" height="38" rx="10" fill="#334155" fill-opacity="0.8"/>
-    <text x="90" y="24" fill="#f8fafc" font-family="sans-serif" font-size="15" font-weight="600" text-anchor="middle">⚡ Instant Stripping</text>
+    <text x="90" y="24" fill="#f8fafc" font-family="sans-serif" font-size="15" font-weight="600" text-anchor="middle">🤖 WebMCP Tools</text>
 
     <rect x="195" y="0" width="185" height="38" rx="10" fill="#334155" fill-opacity="0.8"/>
     <text x="287" y="24" fill="#f8fafc" font-family="sans-serif" font-size="15" font-weight="600" text-anchor="middle">📄 Private OCR</text>

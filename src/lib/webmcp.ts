@@ -3,45 +3,42 @@
  * WebMCP is progressively enhanced: browsers without the API keep using the
  * normal editor, while supporting browsers can discover and invoke these
  * page-local tools.
+ *
+ * Unlike a remote MCP server, a WebMCP tool returns any JSON-serializable
+ * value from `execute`. Keeping results as ordinary objects makes them easier
+ * for browser agents to inspect and keeps the implementation aligned with the
+ * current WebMCP specification.
  */
-export interface WebMCPTextContent {
-  type: 'text';
-  text: string;
+export interface WebMCPToolExecuteOptions {
+  signal: AbortSignal;
 }
 
-export interface WebMCPToolResult {
-  content: WebMCPTextContent[];
+export interface WebMCPError {
+  error: string;
 }
 
 export interface WebMCPTool {
   name: string;
+  title?: string;
   description: string;
   inputSchema: Record<string, unknown>;
   annotations?: {
     readOnlyHint?: boolean;
-    destructiveHint?: boolean;
-    idempotentHint?: boolean;
-    openWorldHint?: boolean;
     untrustedContentHint?: boolean;
   };
-  execute: (input: unknown) => WebMCPToolResult | Promise<WebMCPToolResult>;
+  execute: (input: unknown, options: WebMCPToolExecuteOptions) => unknown | Promise<unknown>;
 }
 
 export interface WebMCPModelContext {
   registerTool: (tool: WebMCPTool, options?: { signal?: AbortSignal }) => Promise<void>;
 }
 
-export function webMcpResult(value: unknown): WebMCPToolResult {
-  return {
-    content: [{
-      type: 'text',
-      text: typeof value === 'string' ? value : JSON.stringify(value) ?? 'null',
-    }],
-  };
+export function webMcpResult<T>(value: T): T {
+  return value;
 }
 
-export function webMcpError(message: string): WebMCPToolResult {
-  return webMcpResult({ error: message });
+export function webMcpError(message: string): WebMCPError {
+  return { error: message };
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

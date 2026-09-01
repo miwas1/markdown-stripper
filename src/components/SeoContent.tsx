@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   ShieldCheck, Zap, FileOutput, Search, 
   ChevronDown, CheckCircle2, 
-  FileText, Layers, Sparkles
+  FileText, Layers, Sparkles, Bot
 } from 'lucide-react';
 
 interface FaqItem {
@@ -14,6 +14,10 @@ const FAQS: FaqItem[] = [
   {
     question: "What is MarkDown Stripper and how does it work?",
     answer: "MarkDown Stripper is a specialized online utility that removes Markdown markup formatting syntax (such as headers `#`, bold `**`, italics `*`, links `[text](url)`, code fences, blockquotes, and tables) while preserving the clean, readable textual content and paragraph structure. It processes your text instantly directly in your browser."
+  },
+  {
+    question: "How can an AI agent use MarkDown Stripper?",
+    answer: "In a compatible browser, WebMCP gives an agent structured tools for the same visible editor: it can inspect bounded document state, prepare AI-ready output, check a content-free handoff readiness summary, review local privacy findings, and perform approved redaction or export actions. You keep the final say, and browsers without WebMCP keep the normal editor.",
   },
   {
     question: "Is my text data private and secure?",
@@ -174,9 +178,19 @@ export const SeoContent: React.FC = () => {
               <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Private OCR for Scans</h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
                 Recover printed text from scanned PDF pages and images locally, with language suggestions, page progress, confidence warnings, and manual review.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-5 sm:p-6 rounded-2xl border border-zinc-100 bg-zinc-50/50 hover:border-indigo-100 hover:bg-white hover:shadow-md transition-all">
+              <div className="w-10 h-10 rounded-xl bg-indigo-950 text-white flex items-center justify-center mb-4 shadow-indigo-100 shadow-lg">
+                <Bot className="w-5 h-5" />
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">WebMCP Agent Handoff</h3>
+              <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
+                Give browser agents precise tools for the same live document while a human reviews privacy, references, and the final export.
               </p>
             </div>
-          </div>
         </section>
 
         {/* How It Works Section */}

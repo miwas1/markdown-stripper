@@ -1,13 +1,14 @@
 {
-  "name": "react-example",
+  "name": "markdown-stripper",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "cf-typegen": "npx --yes wrangler@4.127.1 types",
-    "deploy": "npx --yes wrangler@4.127.1 deploy",
+    "deploy": "npm run build && npx --yes wrangler@4.127.1 deploy",
+    "deploy:dry": "npm run build && npx --yes wrangler@4.127.1 deploy --dry-run",
     "r2:create": "npx --yes wrangler@4.127.1 r2 bucket create markdown-stripper-models",
     "r2:cors": "npx --yes wrangler@4.127.1 r2 bucket cors set markdown-stripper-models --file cloudflare/r2-cors.json --force",
     "r2:sync": "node scripts/sync-model-assets.mjs",
@@ -15,7 +16,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test src/lib/document/document.test.ts src/worker.test.ts"
+    "test": "node --import tsx --test src/lib/document/document.test.ts src/lib/webmcp.test.ts src/worker.test.ts",
+    "check": "npm run lint && npm test && npm run build"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
