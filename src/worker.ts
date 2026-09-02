@@ -1,7 +1,7 @@
 import { BUTTON_NAMES } from './lib/analytics-config';
 
-const EVENT_NAMES = ['page_view', 'button_click', 'convert_markdown', 'copy_text', 'export_file', 'document_import', 'ocr_complete', 'privacy_scan_complete', 'semantic_scan_complete', 'redact_findings'] as const;
-const FEATURES = ['live_editor', 'clipboard', 'download', 'import', 'ocr', 'privacy_scan', 'semantic_scan', 'redaction'] as const;
+const EVENT_NAMES = ['page_view', 'button_click', 'convert_markdown', 'copy_text', 'export_file', 'document_import', 'ocr_complete', 'privacy_scan_complete', 'redact_findings'] as const;
+const FEATURES = ['live_editor', 'clipboard', 'download', 'import', 'ocr', 'privacy_scan', 'redaction'] as const;
 const VARIANTS = ['plain', 'readable', 'ai', 'txt', 'docx', 'markdown', 'text', 'html', 'pdf', 'image'] as const;
 const SIZE_BUCKETS = ['tiny', 'small', 'medium', 'large'] as const;
 const OUTCOMES = ['success', 'error'] as const;

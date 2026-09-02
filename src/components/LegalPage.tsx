@@ -129,13 +129,13 @@ function PrivacyPolicy() {
       </LegalSection>
 
       <LegalSection title="2. Your documents and text">
-        <p>Core conversion, document import, OCR, safety and privacy scanning, semantic review, word counting, reference extraction, and TXT/DOCX generation run in your browser. The text you paste and the files you select are not sent to MarkDown Stripper’s usage-measurement endpoint for processing.</p>
+        <p>Core conversion, document import, OCR, safety and privacy scanning, word counting, reference extraction, and TXT/DOCX generation run in your browser. The text you paste and the files you select are not sent to MarkDown Stripper’s usage-measurement endpoint for processing.</p>
         <p>Files are subject to the browser’s memory and temporary-session behavior. Clear your input or close the browser when you no longer want the content available in the page.</p>
         <p>Optional OCR and local AI features may download model, runtime, or language files to your browser from our dedicated Cloudflare-hosted asset domain. Those requests download capability files only; they never upload your document content. The underlying third-party artifacts remain subject to their respective licenses.</p>
       </LegalSection>
 
       <LegalSection title="3. Anonymous usage measurements">
-        <p>We collect limited aggregate event information to understand whether the service is working and which features are useful. Events can include page views, explicitly labelled button clicks, conversions, imports, exports, OCR completion, privacy scans, semantic scans, and redaction actions.</p>
+        <p>We collect limited aggregate event information to understand whether the service is working and which features are useful. Events can include page views, explicitly labelled button clicks, conversions, imports, exports, OCR completion, privacy scans, and redaction actions.</p>
         <p>Events may include a stable UI action ID, feature name, conversion or file-format variant, a broad size category, and a success or error outcome. The application does not include visible button text, document text, file contents, filenames, session identifiers, or device profiles in these events. Requests are sent without credentials and the measurement endpoint does not provide a document-upload service.</p>
         <p>As with any website, hosting, network, and security providers may receive standard request metadata such as an IP address, browser information, or access time in their infrastructure logs. We do not use that metadata to reconstruct the contents of your documents.</p>
       </LegalSection>
@@ -158,7 +158,7 @@ function PrivacyPolicy() {
       </LegalSection>
 
       <LegalSection title="8. Your choices and contact">
-        <p>You can choose not to use optional OCR, local AI, semantic, or usage-measurement features, and you can clear browser site data at any time. If you have a privacy question or request, email <a href="mailto:support@markdown-stripper.site" className="text-indigo-600 hover:underline">support@markdown-stripper.site</a>.</p>
+        <p>You can choose not to use optional OCR, local AI, or usage-measurement features, and you can clear browser site data at any time. If you have a privacy question or request, email <a href="mailto:support@markdown-stripper.site" className="text-indigo-600 hover:underline">support@markdown-stripper.site</a>.</p>
       </LegalSection>
 
       <LegalSection title="9. Changes to this policy">
@@ -183,7 +183,7 @@ function TermsOfUse() {
 
       <LegalSection title="3. Prohibited conduct">
         <p>You must not use the service to break the law, infringe another person’s rights, distribute malware, attack or overload the service, bypass reasonable technical limits, or interfere with another person’s use of the service.</p>
-        <p>You must not represent scanner findings, OCR results, semantic matches, or converted output as guaranteed accurate. The safety scanner is a review aid, not a security, compliance, legal, medical, or financial certification.</p>
+        <p>You must not represent scanner findings, OCR results, or converted output as guaranteed accurate. The safety scanner is a review aid, not a security, compliance, legal, medical, or financial certification.</p>
       </LegalSection>
 
       <LegalSection title="4. Your content">
@@ -198,7 +198,7 @@ function TermsOfUse() {
 
       <LegalSection title="6. Availability and disclaimers">
         <p>The service is provided on an “as available” and “as is” basis. We do not promise that it will always be available, uninterrupted, error-free, secure, compatible with every file, or suitable for a particular purpose.</p>
-        <p>Conversion, OCR, privacy findings, semantic matches, exports, and other output can contain errors or omissions. Do not rely on the service as the sole safeguard for confidential information, legal compliance, accessibility, records management, or any high-stakes decision.</p>
+        <p>Conversion, OCR, privacy findings, exports, and other output can contain errors or omissions. Do not rely on the service as the sole safeguard for confidential information, legal compliance, accessibility, records management, or any high-stakes decision.</p>
       </LegalSection>
 
       <LegalSection title="7. Third-party links and resources">

@@ -7,7 +7,7 @@ MarkDown Stripper converts GitHub Flavored Markdown (GFM), CommonMark, LLM outpu
 
 ## Key Capabilities & Features
 - **Zero-Latency Real-Time Stripping**: Client-side parsing instantly strips headings, bold/italics, code fences, blockquotes, tables, and raw markup.
-- **Privacy & Security**: Conversion, import, OCR, safety scanning, and semantic review run in the browser. Aggregate usage measurements contain no document content, filenames, session IDs, or device profiles.
+- **Privacy & Security**: Conversion, import, OCR, and safety scanning run in the browser. Aggregate usage measurements contain no document content, filenames, session IDs, or device profiles.
 - **Multi-Format Export**: One-click clipboard copy, plain text (`.txt`) download, and Microsoft Word (`.docx`) synthesis.
 - **Deep Asset Extraction**: Automatically catalogues embedded hyperlinks, images (`![alt](url)`), and email addresses into an interactive panel.
 - **Purpose-Aware Modes**: Plain, Readable, and AI-ready output from one fast local conversion pipeline.
@@ -15,16 +15,15 @@ MarkDown Stripper converts GitHub Flavored Markdown (GFM), CommonMark, LLM outpu
 - **Safety & Privacy Scan**: Instantly flags exact secrets, personal data, invisible text, hidden comments, and possible prompt injection. An optional browser-only English PII model adds a deeper contextual scan without uploading the document.
 - **Document Import**: Local Markdown, TXT, HTML, DOCX, PDF, PNG, JPG, JPEG, WEBP, BMP, and GIF extraction with lazy-loaded parsers.
 - **Private OCR**: Scanned PDF pages and images can be converted to selectable text locally with language suggestions, page progress, and confidence warnings.
-- **Semantic Insights**: Optional local embeddings compare substantial paragraphs and surface likely repetition without rewriting text.
 - **Drag & Drop**: Native file input and drag-and-drop support for Markdown, documents, and images.
 - **URL Parameter Sharing**: Supports pre-filling text via URL query parameters (`?text=...` or `?sample=chatgpt`).
 
 ## WebMCP agent workflow
 - The top-level page registers 14 imperative WebMCP tools when `document.modelContext` is available.
 - No MCP server configuration is required. A compatible agent discovers these page-local Site tools while the page is open in its built-in browser; the project does not currently expose a remote MCP endpoint for traditional MCP clients.
-- The handoff remains review-first: a person must approve the exact reviewed version in Insights before agent copy/export tools can run.
-- Read tools expose bounded document state, converted output, extracted assets, privacy findings, and a content-free handoff readiness checklist.
-- Write tools can set content/options, prepare an AI-ready handoff, start local privacy scanning, redact reviewed findings, copy/download output, insert the sample, and clear the editor.
+- The handoff remains review-first: a person must approve the exact reviewed version in Insights before content-bearing reads or agent copy/export tools can run.
+- Read tools expose bounded document state, approved cursor-paginated output/assets, content-free privacy findings, and a content-free handoff readiness checklist.
+- Write tools can set content/options, prepare an AI-ready handoff, run cancellable local privacy scanning, redact reviewed findings, copy/download output, insert the sample, and clear the editor.
 - Agents work with the same visible page state as the human. Content-bearing tool results are bounded and marked untrusted; conversion, OCR, scanning, and redaction remain local to the browser.
 - Suggested prompt: “Prepare this document for an agent handoff, check readiness, and tell me what I should review. Do not share or export anything until I approve it.”
 

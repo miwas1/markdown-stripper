@@ -3,22 +3,21 @@
 Website: https://markdown-stripper.site
 Canonical URL: https://markdown-stripper.site/
 Application Type: UtilitiesApplication / WebApplication
-Primary Purpose: High-speed, client-side Markdown syntax stripping, clean text conversion, local OCR, privacy review, semantic insights, and DOCX document export.
+Primary Purpose: High-speed, client-side Markdown syntax stripping, clean text conversion, local OCR, privacy review, and DOCX document export.
 
 ---
 
 ## 1. Description & Architecture
-MarkDown Stripper is a web application designed to strip formatting tags, markdown symbols, and structural punctuation from Markdown documents without requiring server round-trips. It also supports local OCR for scans, optional PII review, and optional semantic duplicate insights.
+MarkDown Stripper is a web application designed to strip formatting tags, markdown symbols, and structural punctuation from Markdown documents without requiring server round-trips. It also supports local OCR for scans and optional PII review.
 
 ### Privacy Model
-All conversion and parsing happens client-side using JavaScript in the user's browser. No user-supplied text or uploaded files are sent to the usage-measurement endpoint. OCR, PII scanning, and semantic analysis are browser-only when enabled; aggregate usage events contain no document content, filenames, session IDs, or device profiles.
+All conversion and parsing happens client-side using JavaScript in the user's browser. No user-supplied text or uploaded files are sent to the usage-measurement endpoint. OCR and PII scanning are browser-only when enabled; aggregate usage events contain no document content, filenames, session IDs, or device profiles.
 
 ### Local document intelligence
 - Markdown, TXT, HTML, DOCX, PDF, PNG, JPG, JPEG, WEBP, BMP, and GIF files can be imported locally.
 - Scanned PDF pages and images can be OCR processed in the browser with page progress, confidence warnings, automatic language suggestions, and a manual language selector.
 - The instant privacy scan uses deterministic checks for credentials, contact patterns, hidden content, encoded payloads, and possible prompt injection.
 - An optional local English PII model adds contextual findings for names, addresses, identity information, financial data, and health information. Findings are reviewable before redaction.
-- Optional semantic insights compare substantial paragraphs locally and show likely repeated passages with similarity scores. They never silently rewrite text.
 
 ---
 
@@ -67,7 +66,7 @@ Read tools: `get_document_state`, `get_converted_text`, `list_document_assets`, 
 
 Write tools: `set_document_content`, `set_conversion_options`, `prepare_agent_handoff`, `run_deep_privacy_scan`, `redact_document_findings`, `copy_converted_text`, `download_converted_text`, `insert_sample_document`, and `clear_document`.
 
-The recommended human-in-the-loop flow is: prepare the AI-ready handoff, run the local privacy scan, check readiness, review local privacy findings and import warnings in the visible Insights panel, rerun the scan after any redaction, then approve the exact document version before copy or export. Content-bearing results are bounded and marked untrusted. The readiness tool does not return document text and does not claim that detection is a security guarantee.
+The recommended human-in-the-loop flow is: prepare the AI-ready handoff, run the cancellable local privacy scan to completion, check readiness, review local privacy findings and import warnings in the visible Insights panel, rerun the scan after any redaction, then approve the exact document version before content-bearing reads, copy, or export. Approved text and assets use bounded cursor pages and are marked untrusted. The readiness and privacy-finding tools do not return document text and do not claim that detection is a security guarantee.
 
 ---
 

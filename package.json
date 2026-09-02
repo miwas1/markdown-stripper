@@ -40,7 +40,8 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "7.3.6"
+    "vite": "7.3.6",
+    "webmcp-types": "^0.1.5"
   },
   "optionalDependencies": {
     "@tailwindcss/oxide-android-arm64": "^4.3.0",

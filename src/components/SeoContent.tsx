@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  ShieldCheck, Zap, FileOutput, Search, 
+  ShieldCheck, Zap, FileOutput, Search,
   ChevronDown, CheckCircle2, 
   FileText, Layers, Sparkles, Bot
 } from 'lucide-react';
@@ -17,7 +17,7 @@ const FAQS: FaqItem[] = [
   },
   {
     question: "How can an AI agent use MarkDown Stripper?",
-    answer: "In a compatible browser, WebMCP gives an agent structured tools for the same visible editor: it can inspect bounded document state, prepare AI-ready output, check a content-free handoff readiness summary, review local privacy findings, and perform approved redaction or export actions. You keep the final say, and browsers without WebMCP keep the normal editor.",
+    answer: "In a compatible browser, WebMCP gives an agent structured tools for the same visible editor: it can inspect content-free document state, prepare AI-ready output, run a cancellable local privacy scan, review bounded finding metadata, and redact reviewed IDs. Exact-version human approval is required before document text, asset values, copy, or export become available to the agent.",
   },
   {
     question: "Do I need to add an MCP configuration to my agent?",
@@ -25,7 +25,7 @@ const FAQS: FaqItem[] = [
   },
   {
     question: "Is my text data private and secure?",
-    answer: "Markdown stripping, document import, OCR, safety scanning, semantic review, word counting, asset parsing, and TXT/DOCX generation happen locally in your browser. Optional model files may download, but document text and uploaded files are not sent to the usage-measurement endpoint."
+    answer: "Markdown stripping, document import, OCR, safety scanning, word counting, asset parsing, and TXT/DOCX generation happen locally in your browser. Optional model files may download, but document text and uploaded files are not sent to the usage-measurement endpoint."
   },
   {
     question: "Can I export stripped Markdown directly to Microsoft Word (.docx)?",
@@ -42,10 +42,6 @@ const FAQS: FaqItem[] = [
   {
     question: "What does the Safety & Privacy scanner check?",
     answer: "The instant local scanner flags likely credentials, personal data, invisible Unicode, hidden HTML comments, encoded payloads, and possible prompt-injection instructions. After page load, a compact English PII model is prepared during browser idle time and cached for optional deep scans of contextual names, addresses, and identity details without uploading the document. Findings can be selectively redacted, but no scanner is a security guarantee."
-  },
-  {
-    question: "Can it find repeated or similar paragraphs?",
-    answer: "Yes. Optional Semantic Insights compare substantial paragraphs locally and show likely repeated passages with similarity scores. The feature is advisory, never rewrites your text, and runs only after you enable its small browser model."
   },
   {
     question: "Why should I convert Markdown to Plain Text?",
@@ -96,7 +92,7 @@ export const SeoContent: React.FC = () => {
             What is MarkDown Stripper?
           </h2>
           <p className="text-zinc-700 text-sm sm:text-base leading-relaxed">
-            <strong>MarkDown Stripper</strong> (<a href="https://markdown-stripper.site" className="text-indigo-600 font-medium hover:underline">markdown-stripper.site</a>) is a zero-latency, privacy-focused online utility that removes Markdown syntax formatting—including headings, asterisks, bold/italics, code fences, blockquotes, LaTeX markers, and HTML tags—from raw text to generate clean, readable plain text. It also imports documents and images, offers private OCR for scans, optional PII review and semantic duplicate insights, automatic asset extraction (hyperlinks, images, emails), and direct export to <strong>.TXT</strong> and <strong>Microsoft Word (.DOCX)</strong> files directly within your browser.
+            <strong>MarkDown Stripper</strong> (<a href="https://markdown-stripper.site" className="text-indigo-600 font-medium hover:underline">markdown-stripper.site</a>) is a zero-latency, privacy-focused online utility that removes Markdown syntax formatting—including headings, asterisks, bold/italics, code fences, blockquotes, LaTeX markers, and HTML tags—from raw text to generate clean, readable plain text. It also imports documents and images, offers private OCR for scans, optional PII review, automatic asset extraction (hyperlinks, images, emails), and direct export to <strong>.TXT</strong> and <strong>Microsoft Word (.DOCX)</strong> files directly within your browser.
           </p>
         </section>
 
@@ -131,7 +127,7 @@ export const SeoContent: React.FC = () => {
               </div>
               <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Local-First Privacy</h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
-                Your content is processed directly in your browser session. Core conversion, OCR, privacy scanning, and semantic review keep document text on your device.
+                Your content is processed directly in your browser session. Core conversion, OCR, and privacy scanning keep document text on your device.
               </p>
             </div>
 
@@ -162,16 +158,6 @@ export const SeoContent: React.FC = () => {
               <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Local Document Import</h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
                 Drag in Markdown, TXT, HTML, DOCX, PDF, or image documents. Heavy parsers and OCR load only when their capability is selected.
-              </p>
-            </div>
-
-            <div className="p-5 sm:p-6 rounded-2xl border border-zinc-100 bg-zinc-50/50 hover:border-violet-100 hover:bg-white hover:shadow-md transition-all">
-              <div className="w-10 h-10 rounded-xl bg-violet-600 text-white flex items-center justify-center mb-4 shadow-violet-100 shadow-lg">
-                <Search className="w-5 h-5" />
-              </div>
-              <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Local Semantic Insights</h3>
-              <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
-                Find likely repeated paragraphs and related passages with optional on-device embeddings. Results are reviewable suggestions, never silent edits.
               </p>
             </div>
 

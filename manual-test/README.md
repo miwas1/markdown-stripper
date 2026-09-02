@@ -34,12 +34,12 @@ Expected: the page registers imperative tools on the top-level `document.modelCo
 ### 0.2 Test read tools, bounds, and ordinary JSON results
 
 1. In the compatible browser, call `get_document_state` with `{}`. Confirm it returns structured lengths, counts, conversion mode, import state, and scan statuses. It must not return the full Markdown document.
-2. Click **Sample** or call `insert_sample_document` with `{}`. Immediately call `get_document_state` again and confirm the state reflects the sample, including its references/assets and safety findings.
-3. Call `list_document_assets` with `{}`. Confirm it returns the sample link, image, email, references, and broken-reference list in structured JSON.
-4. Call `get_safety_findings` with `{}`. Confirm each finding has a stable `id`, type, severity, line, placeholder, source, and confidence where available.
-5. Call `get_converted_text` with `{"maxCharacters": 40}`. Confirm `text.length` is at most 40, `totalCharacters` reports the full size, and `truncated` is accurate.
+2. Click **Sample** or call `insert_sample_document` with `{}`. Immediately call `get_document_state` again and confirm the state reflects the sample, including reference/asset and safety-finding counts.
+3. Before approval, call `list_document_assets` and `get_converted_text`. Confirm both executions reject without returning document-bearing content.
+4. Call `get_safety_findings` with `{}`. Confirm it returns at most two content-free findings with stable IDs, types, severities, lines, placeholders, and a `nextCursor` when another page exists.
+5. Continue `get_safety_findings` with its `nextCursor` and confirm pages do not repeat or skip findings.
 6. Call `get_handoff_readiness` with `{}`. Confirm it returns a content-free checklist with `readiness`, `checks`, `privacy`, `document`, and `nextSteps`; it must not contain a `text` field.
-7. Confirm tool results are ordinary JSON objects such as `{ "updated": true }`, not an MCP server envelope such as `{ "content": [...] }`.
+7. Confirm successful tool results are ordinary JSON objects such as `{ "updated": true }`, not an MCP server envelope such as `{ "content": [...] }`; invalid calls must reject rather than resolve to `{ "error": ... }`.
 
 Expected: reads are bounded and easy for an agent to verify without dumping the document into the conversation.
 
@@ -47,18 +47,18 @@ Expected: reads are bounded and easy for an agent to verify without dumping the 
 
 Use the sample document or [fixtures/02-safety-and-pii.txt](fixtures/02-safety-and-pii.txt) so the privacy review is visible. Do not use real personal information or credentials.
 
-1. Start from **Clear**. Call `set_document_content` with a short Markdown document containing a fictional email and link. Immediately call `get_document_state` and `list_document_assets`; confirm the new content and derived assets are already visible to the tools.
+1. Start from **Clear**. Call `set_document_content` with a short Markdown document containing a fictional email and link. Immediately call `get_document_state`; confirm the new content and derived counts are visible while detailed content remains approval-gated.
 2. Call `prepare_agent_handoff` with `{ "appendReferences": true }`. Confirm the visible mode changes to **AI-ready**, references are enabled, Insights opens, and the result tells the agent to call `get_handoff_readiness`.
 3. Call `get_handoff_readiness`. Confirm it reports **review**, explains that the local scan or privacy review is still needed, and reports `humanApprovalGranted: false`.
-4. Call `run_deep_privacy_scan` with `{}`. Confirm it returns `started: true` or `already-running`, then poll `get_document_state` or `get_handoff_readiness` until `deepScanStatus` is `complete`. Call `get_safety_findings` again after completion.
+4. Call `run_deep_privacy_scan` with `{}`. Confirm the invocation remains pending while the visible scan runs and resolves with `status: "complete"`, a local-model finding count, and runtime. Call `get_safety_findings` after completion.
 5. Review the finding IDs with the human. Call `redact_document_findings` with one explicit reviewed ID, for example `{ "findingIds": ["<id-from-get_safety_findings>"] }`.
 6. Confirm the visible editor changes, the selected value becomes a placeholder, approval is reset, and the document’s deep-scan status requires a fresh scan. The schema must reject `redactAll` and unknown IDs.
-7. Run `run_deep_privacy_scan` again for the changed document. Wait for `deepScanStatus: "complete"`, then call `get_safety_findings` and confirm no unintended findings remain.
-8. When the output is AI-ready, the current scan is complete, there are no remaining findings, and there are no broken references, call `get_handoff_readiness`. Confirm `contentChecksPass: true` but `humanApprovalGranted: false`; the UI should offer **Approve this version for agent export**.
-9. Before clicking the approval button, call `copy_converted_text` or `download_converted_text`. Confirm the tool returns a clear human-approval error and performs no copy/download.
-10. Have the human review the visible output and click **Approve this version for agent export** in Insights. Confirm the UI says **Approved for this exact document version** and the readiness result becomes `readiness: "ready"` / `agentHandoffReady: true`.
-11. Call `get_converted_text` with a bounded limit, then call `copy_converted_text` or `download_converted_text`. Confirm the visible action succeeds only after approval.
-12. Change the document, conversion mode, references option, or privacy findings. Confirm approval disappears and copy/download is blocked again until the new version is reviewed.
+7. Run `run_deep_privacy_scan` again for the changed document. Wait for the invocation to resolve, then call `get_safety_findings` and confirm no unintended findings remain.
+8. When the output is AI-ready, the current scan is complete, there are no remaining findings, and there are no broken references, call `get_handoff_readiness`. Confirm `contentChecksPass: true` but `humanApprovalGranted: false`; the UI should offer **Approve this version for agent access**.
+9. Before clicking the approval button, call `get_converted_text`, `list_document_assets`, `copy_converted_text`, and `download_converted_text`. Confirm each rejects with a clear human-approval error and returns or exports no document-bearing content.
+10. Have the human review the visible output and click **Approve this version for agent access** in Insights. Confirm the UI says **Approved for this exact document version** and the readiness result becomes `readiness: "ready"` / `agentHandoffReady: true`.
+11. Call `get_converted_text` with `{"maxCharacters": 40}`. Confirm the chunk is at most 40 characters, then continue from `nextCursor`. Call `list_document_assets` and follow its `nextCursor`; confirm each page has at most two items and long fields are explicitly truncated. Then call `copy_converted_text` or `download_converted_text` and confirm the visible action succeeds.
+12. Change the document, conversion mode, references option, or privacy findings. Confirm approval disappears immediately and content reads, copy, and download are blocked until the new fingerprint is reviewed.
 
 Expected: the agent can inspect and prepare the page, while a human reviews and explicitly approves the exact version before export.
 
@@ -68,8 +68,8 @@ Expected: the agent can inspect and prepare the page, while a human reviews and 
 2. Call `set_conversion_options` with an invalid mode, a non-boolean `appendReferences`, or an empty object. Confirm a validation error.
 3. Call `prepare_agent_handoff` with a non-object or non-boolean `appendReferences`. Confirm a validation error.
 4. Call `redact_document_findings` with missing/empty `findingIds`, an unknown ID, or the removed `redactAll` property. Confirm the call is rejected without changing the editor.
-5. Start a deep scan, then click **Cancel** in Insights or cancel the tool execution from the inspector. Confirm the page remains responsive, the scan returns to a usable state, and a later retry works.
-6. Reload the page and confirm tools are registered again without duplicate-name errors.
+5. Start a deep scan, then cancel the still-pending tool execution from the inspector. Confirm it rejects with cancellation, the worker stops, the page returns to a usable state, and a later retry works. Repeat with the visible **Cancel** action.
+6. Simulate or observe any registration failure and confirm the UI never claims “14 tools ready” for a partial tool set. Reload and confirm all tools register once without duplicate-name errors.
 
 ## 1. Basic live conversion and counters
 
@@ -125,16 +125,7 @@ Expected: this fixture contains no real credentials. Never test with genuine sec
 9. Select one Local AI finding and redact it.
 10. Confirm the redaction invalidates the previous deep-scan result. Run **Scan again**, wait for **Deep scan complete**, and confirm the handoff readiness card reflects the changed document.
 
-## 6. Semantic duplicate detection
-
-1. Paste [fixtures/04-semantic-passages.txt](fixtures/04-semantic-passages.txt).
-2. Open **Insights → Semantic Insights** and click **Enable semantic insights**.
-3. Confirm model requests use `models.markdown-stripper.site`.
-4. Wait for completion and confirm at least one likely-similar paragraph pair is displayed with a percentage.
-5. Confirm the unrelated weather and accounting paragraphs are not the strongest pair.
-6. Edit one duplicate paragraph substantially and rerun. Confirm matches/scores update.
-
-## 7. Text, Markdown, and HTML imports
+## 6. Text, Markdown, and HTML imports
 
 Drag each file onto the upload area, one at a time:
 
@@ -144,13 +135,13 @@ Drag each file onto the upload area, one at a time:
 
 Also test the **Upload** button instead of drag-and-drop once.
 
-## 8. DOCX and selectable PDF imports
+## 7. DOCX and selectable PDF imports
 
 1. Upload [fixtures/07-import.docx](fixtures/07-import.docx). Confirm its headings, paragraphs, list text, email, and link appear. Review any importer warnings.
 2. Upload [fixtures/08-selectable-text.pdf](fixtures/08-selectable-text.pdf). Confirm text from both pages appears in page order.
 3. Confirm a warning notes that PDF columns/complex tables may not preserve reading order.
 
-## 9. Image OCR
+## 8. Image OCR
 
 1. Upload [fixtures/09-ocr-english.png](fixtures/09-ocr-english.png).
 2. Confirm the image-redaction preview appears immediately, before OCR, and the privacy message says processing stays local.
@@ -163,22 +154,22 @@ Also test the **Upload** button instead of drag-and-drop once.
 9. Upload [fixtures/10-ocr-french.png](fixtures/10-ocr-french.png), manually select French, and run OCR. Confirm it recognizes most of `Bonjour`, `confidentialité`, and `référence FR-731`.
 10. Run English OCR again. Confirm cached assets make startup faster.
 
-## 10. Scanned PDF OCR
+## 9. Scanned PDF OCR
 
 1. Upload [fixtures/11-scanned-image.pdf](fixtures/11-scanned-image.pdf).
 2. Confirm the importer warns that the page has no selectable text and offers OCR.
 3. Run English OCR and confirm the same English test phrases are recovered.
 4. Cancel once during OCR, verify the UI returns to a usable state, then retry successfully.
 
-## 11. Errors and limits
+## 10. Errors and limits
 
 1. Upload [fixtures/12-unsupported.csv](fixtures/12-unsupported.csv). Confirm a clear unsupported-file error appears.
 2. Generate a file over the limit with `node generate-fixtures.mjs --oversized`, then upload `fixtures/13-over-30mb.txt`. Confirm the 30 MB limit error. Delete that large file afterward.
 3. Temporarily switch DevTools Network to **Offline**, clear site data, and enable a model feature. Confirm a useful retryable error appears rather than a crash.
 4. Restore **Online**, click Retry, and confirm recovery.
-5. Paste an empty string or click Clear. Confirm output, findings, semantic matches, OCR state, import name, and warnings reset.
+5. Paste an empty string or click Clear. Confirm output, findings, OCR state, import name, and warnings reset.
 
-## 12. Mobile and slow-network behavior
+## 11. Mobile and slow-network behavior
 
 1. Use a real phone or DevTools responsive mode at 375 × 812.
 2. Throttle to **Slow 4G** for the first model run.
@@ -187,7 +178,7 @@ Also test the **Upload** button instead of drag-and-drop once.
 5. Reload and confirm cached repeat use is substantially faster.
 6. Rotate to landscape and verify editors/drawers remain usable.
 
-## 13. Privacy network check
+## 12. Privacy network check
 
 With fixture 02 loaded, inspect Network requests:
 
@@ -195,8 +186,8 @@ With fixture 02 loaded, inspect Network requests:
 - `/api/usage` may receive aggregate event metadata only.
 - Model and OCR requests must contain capability files only.
 - No request should upload the document to the model asset domain.
-- WebMCP tool calls must not create a document-upload request; `get_converted_text` returns text produced by the page itself.
+- WebMCP tool calls must not create a direct document-upload request from the page. After explicit approval, `get_converted_text` hands bounded page-produced text to the browser agent as the requested tool result.
 
 ## Completion criteria
 
-Testing passes when every section is recorded, all 14 WebMCP tools are discoverable and callable in a compatible browser, the human approval gate blocks premature agent export, the post-redaction scan is rerun, all core workflows finish without uncaught errors, model/OCR artifacts load from the custom CDN, repeat model use is cached, exports open correctly, and no document content leaves the browser.
+Testing passes when every section is recorded, all 14 WebMCP tools are discoverable and callable in a compatible browser, the exact-fingerprint approval gate blocks premature content reads and export, cancellation stops a pending deep scan, response pages stay bounded, the post-redaction scan is rerun, all core workflows finish without uncaught errors, model/OCR artifacts load from the custom CDN, repeat model use is cached, exports open correctly, and the page sends no document content to telemetry or model-asset endpoints.

@@ -1,44 +1,7 @@
-/** Minimal local types for the experimental WebMCP API.
- *
- * WebMCP is progressively enhanced: browsers without the API keep using the
- * normal editor, while supporting browsers can discover and invoke these
- * page-local tools.
- *
- * Unlike a remote MCP server, a WebMCP tool returns any JSON-serializable
- * value from `execute`. Keeping results as ordinary objects makes them easier
- * for browser agents to inspect and keeps the implementation aligned with the
- * current WebMCP specification.
- */
-export interface WebMCPToolExecuteOptions {
-  signal: AbortSignal;
-}
+/** Runtime validation helpers for WebMCP tool callbacks. */
 
-export interface WebMCPError {
-  error: string;
-}
-
-export interface WebMCPTool {
-  name: string;
-  title?: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-  annotations?: {
-    readOnlyHint?: boolean;
-    untrustedContentHint?: boolean;
-  };
-  execute: (input: unknown, options: WebMCPToolExecuteOptions) => unknown | Promise<unknown>;
-}
-
-export interface WebMCPModelContext {
-  registerTool: (tool: WebMCPTool, options?: { signal?: AbortSignal }) => Promise<void>;
-}
-
-export function webMcpResult<T>(value: T): T {
-  return value;
-}
-
-export function webMcpError(message: string): WebMCPError {
-  return { error: message };
+export function toolError(message: string): never {
+  throw new Error(message);
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -57,6 +20,11 @@ export function optionalNumberInput(input: unknown, key: string, min: number, ma
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
     ? value
     : undefined;
+}
+
+export function optionalIntegerInput(input: unknown, key: string, min: number, max: number): number | undefined {
+  const value = optionalNumberInput(input, key, min, max);
+  return value !== undefined && Number.isInteger(value) ? value : undefined;
 }
 
 export function stringArrayInput(input: unknown, key: string, maxItems: number, maxItemLength: number): string[] | null {

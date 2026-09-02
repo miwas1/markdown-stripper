@@ -24,7 +24,7 @@ MarkDown Stripper makes that a shared workflow:
 2. An agent reads bounded document state and calls `prepare_agent_handoff`.
 3. The page switches to AI-ready context and opens local Insights for the person.
 4. The agent runs the optional local privacy scan and checks `get_handoff_readiness`, while the person reviews privacy findings, OCR warnings, references, and the visible output.
-5. If anything is redacted, the scan is rerun for the new document version. The person then explicitly approves that exact version in Insights; only then can the agent request a copy or local TXT download.
+5. If anything is redacted, the scan is rerun for the new document version. The person then explicitly approves that exact version in Insights; only then can the agent read content-bearing results, copy text, or request a local TXT download.
 
 Try this prompt after inserting the sample document:
 
@@ -37,21 +37,21 @@ All tools are registered imperatively on the top-level page with `document.model
 | Tool | Type | Purpose |
 | --- | --- | --- |
 | `get_document_state` | Read | Current lengths, mode, imports, assets, and scan status |
-| `get_converted_text` | Read | Bounded converted output for agent review |
-| `list_document_assets` | Read | Links, images, emails, and broken references |
-| `get_safety_findings` | Read | Stable local privacy finding IDs and severities |
+| `get_converted_text` | Read | Approved converted output in cursor-based chunks |
+| `list_document_assets` | Read | Approved links, images, emails, and references in bounded pages |
+| `get_safety_findings` | Read | Bounded pages of content-free privacy finding IDs and severities |
 | `get_handoff_readiness` | Read | Content-free readiness checklist before sharing |
 | `set_document_content` | Write | Replace the visible editor content |
 | `set_conversion_options` | Write | Select Plain, Readable, or AI-ready output |
 | `prepare_agent_handoff` | Write | Set AI-ready mode, append references, open Insights |
-| `run_deep_privacy_scan` | Write | Start the optional on-device PII scan |
+| `run_deep_privacy_scan` | Write | Run the cancellable on-device PII scan to completion |
 | `redact_document_findings` | Write | Replace explicitly reviewed finding IDs with placeholders |
 | `copy_converted_text` | Write | Use the visible clipboard action |
 | `download_converted_text` | Write | Start a local `.txt` download |
 | `insert_sample_document` | Write | Load a judge-friendly demonstration document |
 | `clear_document` | Write | Clear the visible document and derived state |
 
-The implementation follows the current WebMCP shape: `execute` returns ordinary JSON-serializable values, `title` labels tools for browser UI, and registration is cancelled with `AbortController` when the page unmounts. See [src/App.tsx](src/App.tsx) and [src/lib/webmcp.ts](src/lib/webmcp.ts).
+The implementation follows the current WebMCP shape: successful `execute` calls return ordinary JSON values, failures reject, titles label tools for browser UI, and registration is cancelled with `AbortController` when the page unmounts. Registration is atomic, content pages stay within a small response budget, and approval is bound to an exact state fingerprint. See [src/App.tsx](src/App.tsx), [src/lib/webmcp-tools.ts](src/lib/webmcp-tools.ts), and [src/lib/webmcp.ts](src/lib/webmcp.ts).
 
 ## Product capabilities
 
@@ -61,7 +61,6 @@ The implementation follows the current WebMCP shape: `execute` returns ordinary 
 - Local image redaction with OCR/PII suggestions, manual boxes, original-resolution PNG export, metadata stripping, and optional verification OCR
 - Unicode-aware deterministic checks (including checksum-validated financial identifiers) plus an optional local PII model
 - Snapshot-bound selective redaction with stable finding IDs, deterministic overlap handling, and consistent aliases for repeated values
-- Local semantic duplicate detection
 - Link, image, email, and reference extraction
 - Clipboard, TXT, and DOCX export
 - No document text is sent to the usage telemetry endpoint or model asset host
@@ -87,16 +86,17 @@ The Worker serves the Vite build from `dist/` and keeps `/api/usage` limited to 
 
 ## Repository map
 
-- `src/App.tsx` — editor, Insights drawer, and WebMCP registration
-- `src/lib/document/` — conversion, import, OCR, privacy, semantic, and handoff logic
-- `src/lib/webmcp.ts` — local WebMCP types, validation helpers, and result helpers
+- `src/App.tsx` — editor, Insights drawer, WebMCP runtime adapter, and registration lifecycle
+- `src/lib/document/` — conversion, import, OCR, privacy, and handoff logic
+- `src/lib/webmcp-tools.ts` — tool contracts, bounded pagination, approval enforcement, and atomic registration
+- `src/lib/webmcp.ts` — tool input validation helpers; API declarations come from `webmcp-types`
 - `manual-test/` — fixture set and full manual test plan
 - `SUBMISSION.md` — Devpost-ready narrative, video storyboard, and final checklist
 - `wrangler.jsonc` — Cloudflare Worker/static asset configuration
 
 ## Hackathon provenance
 
-The converter, importers, OCR, local privacy scan, and semantic insights pre-date the challenge work. The WebMCP extension was added during the submission period and is the work being presented: page-local tool registration, structured agent/human handoff, bounded untrusted reads, privacy-aware mutations, and the judge-facing workflow documentation. Keep the dated Git history available when submitting so the meaningful WebMCP extension is easy to verify.
+The converter, importers, OCR, and local privacy scan pre-date the challenge work. The WebMCP extension was added during the submission period and is the work being presented: page-local tool registration, structured agent/human handoff, bounded untrusted reads, privacy-aware mutations, and the judge-facing workflow documentation. Keep the dated Git history available when submitting so the meaningful WebMCP extension is easy to verify.
 
 At this audit point, the dated WebMCP baseline is commit `c665ddc` (`2026-08-31 18:52 WAT`, `webmcp enabled`). Commit and push the final working-tree changes before submitting so the complete extension is part of the public history.
 

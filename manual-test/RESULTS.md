@@ -17,7 +17,6 @@
 | 3. Clipboard and exports |  |  |
 | 4. Quick safety/redaction |  |  |
 | 5. Deep PII model |  |  |
-| 6. Semantic detection |  |  |
 | 7. Text/Markdown/HTML import |  |  |
 | 8. DOCX/PDF import |  |  |
 | 9. Image OCR |  |  |

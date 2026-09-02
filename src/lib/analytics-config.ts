@@ -36,9 +36,6 @@ export const BUTTON_NAMES = [
   'deep_scan_run',
   'select_all_findings',
   'redact_findings',
-  'semantic_cancel',
-  'semantic_retry',
-  'semantic_run',
   'faq_toggle',
 ] as const;
 

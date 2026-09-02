@@ -1,9 +1,0 @@
-The release team validates every browser workflow before publishing. Testers import representative files, compare converted text, inspect network requests, and record unexpected behavior with reproducible steps. The objective is to catch regressions before customers encounter them.
-
-Before a release is shipped, the quality team checks each browser workflow. They load realistic documents, compare the resulting text, review network traffic, and document defects with repeatable instructions so regressions are found before users see them.
-
-Tomorrow's weather is expected to be warm and dry, with light winds arriving from the northwest during the afternoon. Garden plants may need additional water near sunset.
-
-Monthly accounting closes after invoices are reconciled, bank entries are categorized, and an independent reviewer signs the control checklist. Archived reports are retained for the required period.
-
-Reliable manual testing uses representative inputs and observable expectations. A reviewer repeats the important workflows, checks generated output and network behavior, then writes precise reproduction steps for anything that differs from the intended result.

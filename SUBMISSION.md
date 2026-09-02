@@ -24,11 +24,11 @@ Normal browser automation makes an agent guess which controls to click and how t
 
 ### What people and agents can do together
 
-The person imports or pastes a document and can see every change. The agent can call `prepare_agent_handoff` to switch the visible output to AI-ready context and open Insights, then run the local privacy scan and call `get_handoff_readiness` to report what still needs human review. The person reviews findings, OCR warnings, references, and the output in the UI; after any redaction, the agent reruns the scan for the new version. The person then explicitly approves that exact version. Only after that checkpoint can the agent request a copy or local `.txt` download. This shared state and review-first workflow is difficult to achieve reliably with coordinate-based UI automation.
+The person imports or pastes a document and can see every change. The agent can call `prepare_agent_handoff` to switch the visible output to AI-ready context and open Insights, then run the local privacy scan and call `get_handoff_readiness` to report what still needs human review. The person reviews findings, OCR warnings, references, and the output in the UI; after any redaction, the agent reruns the scan for the new version. The person then explicitly approves that exact version. Only after that checkpoint can the agent read paginated document content, request a copy, or start a local `.txt` download. This shared state and review-first workflow is difficult to achieve reliably with coordinate-based UI automation.
 
 ### Implementation
 
-The app is a React/Vite SPA served by a Cloudflare Worker. WebMCP registration lives in the top-level React page and reuses the same state and actions as the human UI. Tool inputs use narrow JSON Schemas with length and enum validation. Results are ordinary JSON values; content-bearing reads are marked untrusted and bounded. Conversion, OCR, deterministic safety rules, optional PII inference, semantic comparison, and redaction run in browser workers. Aggregate telemetry contains only allowlisted dimensions and never document text.
+The app is a React/Vite SPA served by a Cloudflare Worker. The top-level React page registers a separately tested tool set and reuses the same state and actions as the human UI. Tool inputs use narrow JSON Schemas with application validation. Successful results are ordinary JSON values, failures reject, sensitive reads require an exact-state approval fingerprint, and content is cursor-paginated and marked untrusted. Conversion, OCR, deterministic safety rules, optional cancellable PII inference, and redaction run in the browser. Aggregate telemetry contains only allowlisted dimensions and never document text.
 
 ### Try it
 
@@ -61,10 +61,10 @@ Use a clean browser profile, show the live URL, record narration, and keep backg
 5. Ask the agent to call `get_handoff_readiness`. Expected: a checklist with `readiness`, `checks`, privacy counts, and next steps; no document text in the result.
 6. Ask the agent to call `get_safety_findings`. Expected: stable IDs, severities, line numbers, and placeholders.
 7. Ask the agent to redact one reviewed finding by ID. Expected: the visible editor changes and the document’s deep-scan status returns to review-needed.
-8. Ask the agent to call `run_deep_privacy_scan`, wait for `get_document_state` or `get_handoff_readiness` to report `complete`, and call `get_safety_findings` again.
-9. Ask the agent to call `get_converted_text` with `maxCharacters: 200`. Expected: bounded output with a `truncated` flag.
-10. In Insights, click `Approve this version for agent export`; confirm the approval banner names this exact document version.
-11. Ask the agent to copy or download. Expected: the visible action succeeds only after the approval gate.
+8. Ask the agent to call `run_deep_privacy_scan`; the call remains pending until it completes or is cancelled. Call `get_safety_findings` again afterward.
+9. Before approval, ask for `get_converted_text`. Expected: the execution rejects without returning content.
+10. In Insights, click `Approve this version for agent access`; confirm the approval banner names this exact document version.
+11. Ask for `get_converted_text` with `maxCharacters: 200`, then continue from `nextCursor` if present. Ask the agent to copy or download. Expected: bounded content and visible actions succeed only after approval.
 
 ## Rules and eligibility checklist
 
@@ -87,10 +87,10 @@ Use a clean browser profile, show the live URL, record narration, and keep backg
 
 ### Technical evidence in this repository
 
-- [x] `document.modelContext.registerTool(...)` appears in `src/App.tsx`.
+- [x] The top-level page passes `document.modelContext` to atomic imperative registration in `src/lib/webmcp-tools.ts`.
 - [x] WebMCP is top-level imperative registration, which is discoverable by ChatGPT’s built-in browser.
 - [x] Inputs use JSON Schemas and application-level validation.
-- [x] Text reads are bounded; untrusted content is marked in tool annotations.
+- [x] Approved text/assets are cursor-paginated; untrusted content is marked in tool annotations.
 - [x] Mutations reuse visible application actions and return verification metadata.
 - [x] Local safety review precedes redaction and export in the documented workflow.
 - [x] `LICENSE` is present and the project is intended to be open source.

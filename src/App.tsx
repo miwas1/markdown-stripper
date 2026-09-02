@@ -4,7 +4,7 @@ import {
   Upload, Download, ExternalLink, Mail, Image as ImageIcon,
   PanelRightClose, PanelRightOpen, X, Link as LinkIcon,
   Wand2, Sparkles, FileOutput, Loader2, AlertCircle, Menu, Eye, Edit3, Columns,
-  ShieldCheck, BookOpen, Bot, AlignLeft, CheckSquare, ScanSearch, Lock, Square, Search, Languages
+  ShieldCheck, BookOpen, Bot, AlignLeft, CheckSquare, ScanSearch, Lock, Square, Languages
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SeoContent } from './components/SeoContent';
@@ -36,59 +36,25 @@ import {
   type NormalizedOcrWord,
 } from './lib/document/image-redaction';
 import { OCR_LANGUAGES, type OcrLanguageCode } from './lib/document/language-options';
-import {
-  formatSemanticScore,
-  SEMANTIC_MODEL_DOWNLOAD_MB,
-  type SemanticMatch,
-  type SemanticRuntime,
-  type SemanticStatus,
-  type SemanticWorkerMessage,
-} from './lib/document/semantic';
-import { summarizeAgentHandoff, type AgentHandoffSummary } from './lib/document/handoff';
-import type { ConversionMode, DocumentReference, SafetyFinding } from './lib/document/types';
+import { summarizeAgentHandoff } from './lib/document/handoff';
+import type { ConversionMode, SafetyFinding } from './lib/document/types';
 import type { OcrSource } from './lib/document/types';
 import {
-  isRecord,
-  optionalNumberInput,
-  stringArrayInput,
-  stringInput,
-  webMcpError,
-  webMcpResult,
-  type WebMCPTool,
-} from './lib/webmcp';
-
-interface ExtractedAsset {
-  type: 'link' | 'email' | 'image';
-  value: string;
-  label?: string;
-}
-
-function extractAssets(markdown: string, references: DocumentReference[]): ExtractedAsset[] {
-  const found: ExtractedAsset[] = references.map(reference => ({
-    type: reference.kind === 'image' ? 'image' : 'link',
-    value: reference.url,
-    label: reference.label,
-  }));
-  let match: RegExpExecArray | null;
-
-  const bareUrlRegex = /(?<!["'\(])(https?:\/\/[^\s\)\>]+)(?![^<]*>)/g;
-  while ((match = bareUrlRegex.exec(markdown)) !== null) {
-    if (!found.some(asset => asset.value === match![1])) found.push({ type: 'link', value: match[1] });
-  }
-
-  const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
-  while ((match = emailRegex.exec(markdown)) !== null) found.push({ type: 'email', value: match[1] });
-
-  return found;
-}
+  createHandoffApprovalFingerprint,
+  createWebMcpTools,
+  extractDocumentAssets,
+  registerWebMcpTools,
+  WEBMCP_TOOL_COUNT,
+  type DeepScanResult,
+  type ExtractedAsset,
+  type WebMCPRuntime,
+} from './lib/webmcp-tools';
 
 const CONVERSION_MODES: Array<{ id: ConversionMode; label: string; description: string }> = [
   { id: 'plain', label: 'Plain', description: 'Maximum cleanup' },
   { id: 'readable', label: 'Readable', description: 'Preserve useful structure' },
   { id: 'ai', label: 'AI-ready', description: 'Safe structured context' },
 ];
-
-const WEBMCP_TOOL_COUNT = 14;
 
 const SAMPLE_MARKDOWN = `# Sample Markdown Document
 
@@ -111,98 +77,6 @@ This sample exercises common Markdown syntax and local document insights.
 const result = convertDocument(text, { mode: 'readable' });
 \`\`\`
 `;
-
-function isConversionMode(value: unknown): value is ConversionMode {
-  return value === 'plain' || value === 'readable' || value === 'ai';
-}
-
-interface WebMCPRuntime {
-  markdown: string;
-  plainText: string;
-  conversionMode: ConversionMode;
-  appendReferences: boolean;
-  importedFileName: string | null;
-  importWarnings: string[];
-  imageRedactionActive: boolean;
-  imageOcrCoordinatesReady: boolean;
-  imageRedactionSuggestionCount: number;
-  assets: ExtractedAsset[];
-  references: DocumentReference[];
-  brokenReferences: string[];
-  safetyFindings: SafetyFinding[];
-  deepScanStatus: DeepScanStatus;
-  semanticStatus: SemanticStatus;
-  handoffSummary: AgentHandoffSummary;
-  handoffApproved: boolean;
-  replaceMarkdown: (value: string) => void;
-  setConversionMode: (value: ConversionMode) => void;
-  setAppendReferences: React.Dispatch<React.SetStateAction<boolean>>;
-  setHandoffApproved: React.Dispatch<React.SetStateAction<boolean>>;
-  approveHandoff: () => boolean;
-  handleCopy: () => Promise<boolean>;
-  handleExportText: () => void;
-  handleDeepScan: () => boolean;
-  handleClear: () => void;
-  insertSample: () => void;
-  setShowAssets: React.Dispatch<React.SetStateAction<boolean>>;
-}
-
-function updateWebMcpConversion(runtime: WebMCPRuntime, mode: ConversionMode, appendReferences: boolean): void {
-  const nextConversion = convertDocument(runtime.markdown, { mode, appendReferences });
-  runtime.handoffApproved = false;
-  runtime.setHandoffApproved(false);
-  runtime.conversionMode = mode;
-  runtime.appendReferences = appendReferences;
-  runtime.plainText = nextConversion.text;
-  runtime.references = nextConversion.references;
-  runtime.brokenReferences = nextConversion.brokenReferences;
-  runtime.handoffSummary = summarizeAgentHandoff({
-    markdown: runtime.markdown,
-    plainText: runtime.plainText,
-    conversionMode: runtime.conversionMode,
-    appendReferences: runtime.appendReferences,
-    references: runtime.references,
-    brokenReferences: runtime.brokenReferences,
-    safetyFindings: runtime.safetyFindings,
-    deepScanStatus: runtime.deepScanStatus,
-    importWarnings: runtime.importWarnings,
-    humanApprovalGranted: runtime.handoffApproved,
-  });
-}
-
-function syncWebMcpDocument(runtime: WebMCPRuntime, markdown: string): void {
-  const nextConversion = convertDocument(markdown, {
-    mode: runtime.conversionMode,
-    appendReferences: runtime.appendReferences,
-  });
-  runtime.markdown = markdown;
-  runtime.importedFileName = null;
-  runtime.importWarnings = [];
-  runtime.imageRedactionActive = false;
-  runtime.imageOcrCoordinatesReady = false;
-  runtime.imageRedactionSuggestionCount = 0;
-  runtime.assets = extractAssets(markdown, nextConversion.references);
-  runtime.safetyFindings = scanDocument(markdown);
-  runtime.deepScanStatus = 'idle';
-  runtime.semanticStatus = 'idle';
-  runtime.handoffApproved = false;
-  runtime.setHandoffApproved(false);
-  runtime.plainText = nextConversion.text;
-  runtime.references = nextConversion.references;
-  runtime.brokenReferences = nextConversion.brokenReferences;
-  runtime.handoffSummary = summarizeAgentHandoff({
-    markdown: runtime.markdown,
-    plainText: runtime.plainText,
-    conversionMode: runtime.conversionMode,
-    appendReferences: runtime.appendReferences,
-    references: runtime.references,
-    brokenReferences: runtime.brokenReferences,
-    safetyFindings: runtime.safetyFindings,
-    deepScanStatus: runtime.deepScanStatus,
-    importWarnings: runtime.importWarnings,
-    humanApprovalGranted: runtime.handoffApproved,
-  });
-}
 
 export default function App() {
   const [markdown, setMarkdown] = useState<string>('');
@@ -236,29 +110,24 @@ export default function App() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageOcrText, setImageOcrText] = useState<string | null>(null);
   const [imageOcrWords, setImageOcrWords] = useState<NormalizedOcrWord[]>([]);
-  const [semanticMatches, setSemanticMatches] = useState<SemanticMatch[]>([]);
-  const [semanticSegmentCount, setSemanticSegmentCount] = useState(0);
-  const [semanticStatus, setSemanticStatus] = useState<SemanticStatus>('idle');
-  const [semanticProgress, setSemanticProgress] = useState<number | null>(null);
-  const [semanticError, setSemanticError] = useState<string | null>(null);
-  const [semanticRuntime, setSemanticRuntime] = useState<SemanticRuntime | null>(null);
-  const [semanticModelReady, setSemanticModelReady] = useState(false);
   const [webMcpStatus, setWebMcpStatus] = useState<'checking' | 'ready' | 'unsupported' | 'error'>('checking');
-  const [handoffApproved, setHandoffApproved] = useState(false);
+  const [webMcpRegisteredCount, setWebMcpRegisteredCount] = useState(0);
+  const [approvedHandoffFingerprint, setApprovedHandoffFingerprint] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const deepWorkerRef = useRef<Worker | null>(null);
   const deepRequestIdRef = useRef(0);
   const deepSourceRef = useRef<{ requestId: number; text: string } | null>(null);
   const deepSignalCleanupRef = useRef<(() => void) | null>(null);
+  const deepResolverRef = useRef<{
+    requestId: number;
+    resolve: (result: DeepScanResult) => void;
+    reject: (error: Error) => void;
+  } | null>(null);
   const lastDeepScannedTextRef = useRef<string | null>(null);
   const markdownRef = useRef(markdown);
   const ocrWorkerRef = useRef<Worker | null>(null);
   const ocrRequestIdRef = useRef(0);
   const ocrResolversRef = useRef(new Map<number, { resolve: (result: OcrRecognitionResult) => void; reject: (error: Error) => void }>());
-  const semanticWorkerRef = useRef<Worker | null>(null);
-  const semanticRequestIdRef = useRef(0);
-  const semanticSourceRef = useRef<{ requestId: number; text: string } | null>(null);
-  const lastSemanticTextRef = useRef<string | null>(null);
   const webMcpRuntimeRef = useRef<WebMCPRuntime | null>(null);
   const deferredMarkdown = useDeferredValue(markdown);
   const conversion = useMemo(
@@ -277,6 +146,19 @@ export default function App() {
     () => imageMappingCurrent ? findingsToImageSuggestions(safetyFindings, imageOcrWords) : [],
     [imageMappingCurrent, imageOcrWords, safetyFindings],
   );
+  const approvalFingerprint = useMemo(
+    () => createHandoffApprovalFingerprint({
+      markdown,
+      conversionMode,
+      appendReferences,
+      safetyFindings,
+      deepScanStatus,
+      importWarnings,
+      brokenReferences: conversion.brokenReferences,
+    }),
+    [markdown, conversionMode, appendReferences, safetyFindings, deepScanStatus, importWarnings, conversion.brokenReferences],
+  );
+  const handoffApproved = approvedHandoffFingerprint === approvalFingerprint;
   const handoffSummary = useMemo(
     () => summarizeAgentHandoff({
       markdown,
@@ -290,25 +172,14 @@ export default function App() {
       importWarnings,
       humanApprovalGranted: handoffApproved,
     }),
-    [
-      markdown,
-      plainText,
-      conversionMode,
-      appendReferences,
-      conversion.references,
-      conversion.brokenReferences,
-      safetyFindings,
-      deepScanStatus,
-      importWarnings,
-      handoffApproved,
-    ],
+    [markdown, plainText, conversionMode, appendReferences, conversion.references, conversion.brokenReferences, safetyFindings, deepScanStatus, importWarnings, handoffApproved],
   );
 
-  // Approval belongs to this exact document/check state. Any content, option,
-  // or privacy-scan change requires the person to review and approve again.
   useEffect(() => {
-    setHandoffApproved(false);
-  }, [markdown, conversionMode, appendReferences, safetyFindings, deepScanStatus, importWarnings]);
+    if (approvedHandoffFingerprint !== null && approvedHandoffFingerprint !== approvalFingerprint) {
+      setApprovedHandoffFingerprint(null);
+    }
+  }, [approvalFingerprint, approvedHandoffFingerprint]);
 
   // Set document title & track page view invisibly on mount, handle query parameters
   useEffect(() => {
@@ -374,9 +245,11 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
   }, [plainText, conversionMode]);
 
   // Extract links, images, and emails
-  const assets = useMemo(() => extractAssets(markdown, conversion.references), [markdown, conversion.references]);
+  const assets = useMemo(() => extractDocumentAssets(markdown, conversion.references), [markdown, conversion.references]);
 
   const cancelDeepScan = useCallback(() => {
+    const resolver = deepResolverRef.current;
+    deepResolverRef.current = null;
     deepSignalCleanupRef.current?.();
     deepSignalCleanupRef.current = null;
     deepWorkerRef.current?.terminate();
@@ -387,6 +260,11 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     setDeepScanProgress(null);
     setDeepScanError(null);
     setDeepModelReady(false);
+    if (resolver) {
+      const error = new Error('Deep privacy scan cancelled.');
+      error.name = 'AbortError';
+      resolver.reject(error);
+    }
   }, []);
 
   const getDeepWorker = useCallback(() => {
@@ -435,6 +313,9 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
       }
       if (message.type === 'complete') {
         const findings = modelEntitiesToFindings(active.text, message.entities);
+        const resolver = deepResolverRef.current?.requestId === message.requestId
+          ? deepResolverRef.current
+          : null;
         setDeepScanFindings(findings);
         setDeepScanRuntime(message.runtime);
         setDeepScanStatus('complete');
@@ -444,6 +325,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
         lastDeepScannedTextRef.current = active.text;
         deepSignalCleanupRef.current?.();
         deepSignalCleanupRef.current = null;
+        deepResolverRef.current = null;
         deepSourceRef.current = null;
         setShowAssets(true);
         trackEvent('privacy_scan_complete', {
@@ -451,16 +333,22 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
           sizeBucket: sizeBucket(active.text.length),
           outcome: 'success',
         });
+        resolver?.resolve({ status: 'complete', modelFindingCount: findings.length, runtime: message.runtime });
         return;
       }
 
       console.error('Deep privacy scan error:', message.message);
+      const resolver = deepResolverRef.current?.requestId === message.requestId
+        ? deepResolverRef.current
+        : null;
       setDeepScanStatus('error');
       setDeepScanProgress(null);
       setDeepScanError('Could not run the deep local scan. Check your connection and available device memory, then retry.');
       deepSignalCleanupRef.current?.();
       deepSignalCleanupRef.current = null;
+      deepResolverRef.current = null;
       deepSourceRef.current = null;
+      resolver?.reject(new Error(message.message || 'Deep privacy scan failed.'));
     };
     worker.onerror = event => {
       if (!deepSourceRef.current) {
@@ -471,15 +359,18 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
         return;
       }
       console.error('Deep privacy worker error:', event.message);
+      const resolver = deepResolverRef.current;
       setDeepScanStatus('error');
       setDeepScanProgress(null);
       setDeepScanError('The deep local scanner is not supported on this device or ran out of memory.');
       deepSignalCleanupRef.current?.();
       deepSignalCleanupRef.current = null;
+      deepResolverRef.current = null;
       deepSourceRef.current = null;
       worker.terminate();
       deepWorkerRef.current = null;
       setDeepModelReady(false);
+      resolver?.reject(new Error(event.message || 'Deep privacy worker stopped unexpectedly.'));
     };
     deepWorkerRef.current = worker;
     return worker;
@@ -644,86 +535,15 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     }
   }, [markdown, ocrLanguage, ocrSource, ocrStatus, recognizeOcrImage]);
 
-  const getSemanticWorker = useCallback(() => {
-    if (semanticWorkerRef.current) return semanticWorkerRef.current;
-    const worker = new Worker(new URL('./lib/document/semantic.worker.ts', import.meta.url), { type: 'module' });
-    worker.onmessage = (event: MessageEvent<SemanticWorkerMessage>) => {
-      const message = event.data;
-      const active = semanticSourceRef.current;
-      if (!active || active.requestId !== message.requestId) return;
-      if (message.type === 'loading') {
-        setSemanticStatus('loading');
-        setSemanticRuntime(message.runtime);
-        setSemanticProgress(message.progress ?? null);
-      } else if (message.type === 'analyzing') {
-        setSemanticStatus('analyzing');
-        setSemanticRuntime(message.runtime);
-        setSemanticProgress(message.progress);
-      } else if (message.type === 'complete') {
-        setSemanticMatches(message.matches);
-        setSemanticSegmentCount(message.segmentCount);
-        setSemanticStatus('complete');
-        setSemanticRuntime(message.runtime);
-        setSemanticProgress(100);
-        setSemanticError(null);
-        setSemanticModelReady(true);
-        lastSemanticTextRef.current = active.text;
-        semanticSourceRef.current = null;
-        setShowAssets(true);
-        trackEvent('semantic_scan_complete', {
-          feature: 'semantic_scan',
-          sizeBucket: sizeBucket(active.text.length),
-          outcome: 'success',
-        });
-      } else {
-        console.error('Semantic analysis error:', message.message);
-        setSemanticStatus('error');
-        setSemanticProgress(null);
-        setSemanticError('Could not analyze similar passages on this device. Please retry.');
-        semanticSourceRef.current = null;
-      }
-    };
-    worker.onerror = event => {
-      console.error('Semantic worker error:', event.message);
-      setSemanticStatus('error');
-      setSemanticProgress(null);
-      setSemanticError('Semantic analysis is not supported on this device or ran out of memory.');
-      semanticSourceRef.current = null;
-      worker.terminate();
-      semanticWorkerRef.current = null;
-      setSemanticModelReady(false);
-    };
-    semanticWorkerRef.current = worker;
-    return worker;
-  }, []);
-
-  const cancelSemanticScan = useCallback(() => {
-    semanticWorkerRef.current?.terminate();
-    semanticWorkerRef.current = null;
-    semanticRequestIdRef.current += 1;
-    semanticSourceRef.current = null;
-    setSemanticStatus('idle');
-    setSemanticProgress(null);
-    setSemanticError(null);
-    setSemanticModelReady(false);
-  }, []);
-
-  const handleSemanticScan = useCallback(() => {
-    if (!markdown.trim() || semanticStatus === 'loading' || semanticStatus === 'analyzing') return;
-    const requestId = semanticRequestIdRef.current + 1;
-    semanticRequestIdRef.current = requestId;
-    semanticSourceRef.current = { requestId, text: markdown };
-    setSemanticMatches([]);
-    setSemanticStatus(semanticModelReady ? 'analyzing' : 'loading');
-    setSemanticProgress(semanticModelReady ? 0 : null);
-    setSemanticError(null);
-    setShowAssets(true);
-    getSemanticWorker().postMessage({ type: 'semantic', requestId, text: markdown });
-  }, [getSemanticWorker, markdown, semanticModelReady, semanticStatus]);
-
-  const handleDeepScan = useCallback((signal?: AbortSignal) => {
+  const runDeepPrivacyScan = useCallback((signal?: AbortSignal): Promise<DeepScanResult> => {
     const currentMarkdown = markdownRef.current;
-    if (!currentMarkdown.trim() || deepSourceRef.current || signal?.aborted) return false;
+    if (!currentMarkdown.trim()) return Promise.reject(new Error('Add document content before running a privacy scan.'));
+    if (deepSourceRef.current) return Promise.reject(new Error('A deep privacy scan is already running.'));
+    if (signal?.aborted) {
+      const error = new Error('Deep privacy scan cancelled.');
+      error.name = 'AbortError';
+      return Promise.reject(error);
+    }
     const requestId = deepRequestIdRef.current + 1;
     deepRequestIdRef.current = requestId;
     deepSourceRef.current = { requestId, text: currentMarkdown };
@@ -742,16 +562,33 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     setDeepScanProgress(deepModelReady ? 0 : null);
     setDeepScanError(null);
     setShowAssets(true);
-    getDeepWorker().postMessage({ type: 'scan', requestId, text: currentMarkdown });
-    return true;
+    return new Promise<DeepScanResult>((resolve, reject) => {
+      deepResolverRef.current = { requestId, resolve, reject };
+      try {
+        getDeepWorker().postMessage({ type: 'scan', requestId, text: currentMarkdown });
+      } catch (error) {
+        deepSignalCleanupRef.current?.();
+        deepSignalCleanupRef.current = null;
+        deepResolverRef.current = null;
+        deepSourceRef.current = null;
+        setDeepScanStatus('error');
+        setDeepScanProgress(null);
+        setDeepScanError('Could not start the deep local scanner on this device.');
+        reject(error instanceof Error ? error : new Error('Could not start the deep privacy scan.'));
+      }
+    });
   }, [cancelDeepScan, deepModelReady, getDeepWorker]);
+
+  const handleDeepScan = useCallback(() => {
+    void runDeepPrivacyScan().catch(error => {
+      if (!(error instanceof Error && error.name === 'AbortError')) console.error('Deep privacy scan failed:', error);
+    });
+  }, [runDeepPrivacyScan]);
 
   useEffect(() => {
     markdownRef.current = markdown;
     const active = deepSourceRef.current;
     if (active && active.text !== markdown) cancelDeepScan();
-    const semanticActive = semanticSourceRef.current;
-    if (semanticActive && semanticActive.text !== markdown) cancelSemanticScan();
     if (lastDeepScannedTextRef.current !== null && lastDeepScannedTextRef.current !== markdown) {
       lastDeepScannedTextRef.current = null;
       setDeepScanFindings([]);
@@ -760,19 +597,10 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
       setDeepScanError(null);
       setSelectedFindingIds(new Set());
     }
-    if (lastSemanticTextRef.current !== null && lastSemanticTextRef.current !== markdown) {
-      lastSemanticTextRef.current = null;
-      setSemanticMatches([]);
-      setSemanticSegmentCount(0);
-      setSemanticStatus('idle');
-      setSemanticProgress(null);
-      setSemanticError(null);
-    }
-  }, [cancelDeepScan, cancelSemanticScan, markdown]);
+  }, [cancelDeepScan, markdown]);
 
   useEffect(() => () => {
     deepWorkerRef.current?.terminate();
-    semanticWorkerRef.current?.terminate();
     ocrWorkerRef.current?.terminate();
   }, []);
 
@@ -793,7 +621,6 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
   const handleClear = useCallback(() => {
     cancelDeepScan();
     cancelOcr();
-    cancelSemanticScan();
     markdownRef.current = '';
     setMarkdown('');
     setDeepScanFindings([]);
@@ -812,18 +639,12 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     setImageFile(null);
     setImageOcrText(null);
     setImageOcrWords([]);
-    setSemanticMatches([]);
-    setSemanticSegmentCount(0);
-    setSemanticStatus('idle');
-    setSemanticProgress(null);
-    setSemanticError(null);
     setError(null);
-  }, [cancelDeepScan, cancelOcr, cancelSemanticScan]);
+  }, [cancelDeepScan, cancelOcr]);
 
   const replaceMarkdown = useCallback((value: string) => {
     cancelDeepScan();
     cancelOcr();
-    cancelSemanticScan();
     markdownRef.current = value;
     setMarkdown(value);
     setImportedFileName(null);
@@ -841,13 +662,8 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     setImageOcrWords([]);
     setDeepScanFindings([]);
     setSelectedFindingIds(new Set());
-    setSemanticMatches([]);
-    setSemanticSegmentCount(0);
-    setSemanticStatus('idle');
-    setSemanticProgress(null);
-    setSemanticError(null);
     setError(null);
-  }, [cancelDeepScan, cancelOcr, cancelSemanticScan]);
+  }, [cancelDeepScan, cancelOcr]);
 
   const handleExportText = () => {
     if (!plainText) return;
@@ -881,7 +697,6 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     if (isImporting) return;
     cancelDeepScan();
     cancelOcr();
-    cancelSemanticScan();
     setIsImporting(true);
     setError(null);
     setImportWarnings([]);
@@ -906,9 +721,6 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
         ? `${language.detected ? 'Suggested' : 'Default'} ${language.label} · ${language.confidence} confidence`
         : null);
       setOcrLanguage(language.code);
-      setSemanticMatches([]);
-      setSemanticSegmentCount(0);
-      setSemanticStatus('idle');
       setSelectedFindingIds(new Set());
       trackEvent('document_import', {
         feature: 'import',
@@ -976,9 +788,9 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
 
   const approveHandoff = useCallback(() => {
     if (!handoffSummary.contentChecksPass) return false;
-    setHandoffApproved(true);
+    setApprovedHandoffFingerprint(approvalFingerprint);
     return true;
-  }, [handoffSummary.contentChecksPass]);
+  }, [approvalFingerprint, handoffSummary.contentChecksPass]);
 
   // Keep the latest React state and actions behind one stable ref. WebMCP
   // registration happens once, while tool calls always see the current page.
@@ -997,25 +809,25 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     brokenReferences: conversion.brokenReferences,
     safetyFindings,
     deepScanStatus,
-    semanticStatus,
     handoffSummary,
+    approvalFingerprint,
+    approvedFingerprint: approvedHandoffFingerprint,
     handoffApproved,
     replaceMarkdown,
     setConversionMode: value => setConversionMode(value),
-    setAppendReferences,
-    setHandoffApproved,
-    approveHandoff,
+    setAppendReferences: value => setAppendReferences(value),
+    setApprovedFingerprint: setApprovedHandoffFingerprint,
     handleCopy,
     handleExportText,
-    handleDeepScan,
+    runDeepPrivacyScan,
     handleClear,
-    insertSample,
-    setShowAssets,
+    setShowAssets: value => setShowAssets(value),
   };
 
   useEffect(() => {
     const modelContext = document.modelContext;
     if (!modelContext || typeof modelContext.registerTool !== 'function') {
+      setWebMcpRegisteredCount(0);
       setWebMcpStatus('unsupported');
       return;
     }
@@ -1024,338 +836,20 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
     // context, while retaining the normal editor when the API is unavailable.
     const controller = new AbortController();
     const getRuntime = () => webMcpRuntimeRef.current;
-    const tools: WebMCPTool[] = [
-      {
-        name: 'get_document_state',
-        title: 'Read document state',
-        description: 'Read the current Markdown input, conversion settings, output statistics, sources, and local safety-scan status without changing the document.',
-        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async () => {
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          return webMcpResult({
-            markdownLength: runtime.markdown.length,
-            wordCount: runtime.markdown.trim() ? runtime.markdown.trim().split(/\s+/).length : 0,
-            outputLength: runtime.plainText.length,
-            conversionMode: runtime.conversionMode,
-            appendReferences: runtime.appendReferences,
-            importedFileName: runtime.importedFileName,
-            importWarnings: runtime.importWarnings,
-            imageRedactionActive: runtime.imageRedactionActive,
-            imageOcrCoordinatesReady: runtime.imageOcrCoordinatesReady,
-            imageRedactionSuggestionCount: runtime.imageRedactionSuggestionCount,
-            referenceCount: runtime.references.length,
-            brokenReferenceCount: runtime.brokenReferences.length,
-            assetCount: runtime.assets.length,
-            safetyFindingCount: runtime.safetyFindings.length,
-            deepScanStatus: runtime.deepScanStatus,
-            semanticStatus: runtime.semanticStatus,
-          });
-        },
-      },
-      {
-        name: 'get_converted_text',
-        title: 'Read converted text',
-        description: 'Return the current converted plain-text output so an agent can review, summarize, or use it in a follow-up action. The result is bounded to avoid oversized tool responses.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            maxCharacters: { type: 'number', minimum: 1, maximum: 50000, default: 20000, description: 'Maximum number of output characters to return.' },
-          },
-          additionalProperties: false,
-        },
-        annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async input => {
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          if (isRecord(input) && input.maxCharacters !== undefined
-            && optionalNumberInput(input, 'maxCharacters', 1, 50000) === undefined) {
-            return webMcpError('maxCharacters must be a number from 1 to 50000.');
-          }
-          const maxCharacters = optionalNumberInput(input, 'maxCharacters', 1, 50000) ?? 20000;
-          return webMcpResult({
-            text: runtime.plainText.slice(0, maxCharacters),
-            truncated: runtime.plainText.length > maxCharacters,
-            totalCharacters: runtime.plainText.length,
-            mode: runtime.conversionMode,
-          });
-        },
-      },
-      {
-        name: 'set_document_content',
-        title: 'Replace document content',
-        description: 'Replace the current Markdown document with supplied text. This updates the visible editor and conversion output; it does not upload the document.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            text: { type: 'string', maxLength: 200000, description: 'Markdown, plain text, or compatible source content.' },
-          },
-          required: ['text'],
-          additionalProperties: false,
-        },
-        annotations: { readOnlyHint: false },
-        execute: async input => {
-          const text = stringInput(input, 'text', 200000);
-          if (text === null) return webMcpError('text is required and must be a string of at most 200000 characters.');
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          runtime.replaceMarkdown(text);
-          syncWebMcpDocument(runtime, text);
-          return webMcpResult({
-            updated: true,
-            markdownLength: text.length,
-            outputLength: runtime.plainText.length,
-            safetyFindingCount: runtime.safetyFindings.length,
-          });
-        },
-      },
-      {
-        name: 'set_conversion_options',
-        title: 'Set conversion options',
-        description: 'Set the conversion mode and whether extracted references are appended to the output. Use plain for maximum cleanup, readable to preserve useful structure, or ai for structured context.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            mode: { type: 'string', enum: ['plain', 'readable', 'ai'], description: 'Conversion mode.' },
-            appendReferences: { type: 'boolean', description: 'Whether references and media are appended at the bottom.' },
-          },
-          minProperties: 1,
-          additionalProperties: false,
-        },
-        annotations: { readOnlyHint: false },
-        execute: async input => {
-          if (!isRecord(input)) return webMcpError('Provide mode and/or appendReferences.');
-          const mode = input.mode;
-          const append = input.appendReferences;
-          if (mode === undefined && append === undefined) return webMcpError('Provide mode and/or appendReferences.');
-          if (mode !== undefined && !isConversionMode(mode)) return webMcpError('mode must be plain, readable, or ai.');
-          if (append !== undefined && typeof append !== 'boolean') return webMcpError('appendReferences must be boolean.');
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          const nextMode = mode ?? runtime.conversionMode;
-          const nextAppendReferences = append ?? runtime.appendReferences;
-          if (mode !== undefined) runtime.setConversionMode(mode);
-          if (append !== undefined) runtime.setAppendReferences(append);
-          updateWebMcpConversion(runtime, nextMode, nextAppendReferences);
-          return webMcpResult({
-            updated: true,
-            conversionMode: nextMode,
-            appendReferences: nextAppendReferences,
-          });
-        },
-      },
-      {
-        name: 'list_document_assets',
-        title: 'List document assets',
-        description: 'List links, images, email addresses, and broken references extracted from the current Markdown document.',
-        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async () => {
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          return webMcpResult({ assets: runtime.assets, references: runtime.references, brokenReferences: runtime.brokenReferences });
-        },
-      },
-      {
-        name: 'get_safety_findings',
-        title: 'Read privacy findings',
-        description: 'Read local safety and privacy findings for the current document. Findings include stable IDs and line numbers that can be passed to redact_document_findings.',
-        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: async () => {
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          return webMcpResult({
-            findings: runtime.safetyFindings.map(finding => ({
-              id: finding.id,
-              type: finding.type,
-              severity: finding.severity,
-              title: finding.title,
-              detail: finding.detail,
-              line: finding.line,
-              placeholder: finding.placeholder,
-              source: finding.source,
-              confidence: finding.confidence,
-            })),
-          });
-        },
-      },
-      {
-        name: 'get_handoff_readiness',
-        title: 'Check agent handoff readiness',
-        description: 'Return a bounded readiness checklist for sharing this document with an agent. It reports conversion, references, import warnings, and local privacy-scan status without returning document text.',
-        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: true },
-        execute: async () => {
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          return webMcpResult(runtime.handoffSummary);
-        },
-      },
-      {
-        name: 'prepare_agent_handoff',
-        title: 'Prepare agent handoff',
-        description: 'Prepare the visible document for an agent-assisted review by switching to AI-ready mode, optionally appending references, and opening local insights. This never uploads, shares, or redacts document content.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            appendReferences: { type: 'boolean', default: true, description: 'Append extracted references and media to the AI-ready output.' },
-          },
-          additionalProperties: false,
-        },
-        annotations: { readOnlyHint: false },
-        execute: async input => {
-          if (input !== undefined && !isRecord(input)) return webMcpError('Input must be an object.');
-          const append = isRecord(input) ? input.appendReferences : undefined;
-          if (append !== undefined && typeof append !== 'boolean') return webMcpError('appendReferences must be boolean.');
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          if (!runtime.markdown.trim()) return webMcpError('Add document content before preparing an agent handoff.');
-          runtime.setConversionMode('ai');
-          const nextAppendReferences = typeof append === 'boolean' ? append : true;
-          runtime.setAppendReferences(nextAppendReferences);
-          updateWebMcpConversion(runtime, 'ai', nextAppendReferences);
-          runtime.setShowAssets(true);
-          return webMcpResult({
-            updated: true,
-            conversionMode: 'ai',
-            appendReferences: nextAppendReferences,
-            nextTool: 'get_handoff_readiness',
-            reminder: 'Review local findings in the visible Insights panel before sharing output with an agent.',
-          });
-        },
-      },
-      {
-        name: 'run_deep_privacy_scan',
-        title: 'Run deep privacy scan',
-        description: 'Start the optional local AI privacy scan. The scan runs in the browser and does not upload document content; poll get_document_state or get_handoff_readiness until deepScanStatus is complete, then call get_safety_findings to read results.',
-        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: false },
-        execute: async (_input, options) => {
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          if (!runtime.markdown.trim()) return webMcpError('Add document content before running a privacy scan.');
-          const started = runtime.handleDeepScan(options.signal);
-          const alreadyRunning = runtime.deepScanStatus === 'loading'
-            || runtime.deepScanStatus === 'scanning'
-            || deepSourceRef.current !== null;
-          runtime.setShowAssets(true);
-          return webMcpResult({
-            started,
-            status: started ? 'loading-or-scanning' : alreadyRunning ? 'already-running' : 'not-started',
-            privacy: 'local-only',
-            nextTool: 'get_handoff_readiness',
-          });
-        },
-      },
-      {
-        name: 'redact_document_findings',
-        title: 'Redact privacy findings',
-        description: 'Replace selected local safety findings with safe placeholders in the visible Markdown editor. This is a document mutation and should be used only after reviewing the finding IDs.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            findingIds: { type: 'array', items: { type: 'string', maxLength: 100 }, minItems: 1, maxItems: 100, description: 'Stable finding IDs returned by get_safety_findings after the person has reviewed them.' },
-          },
-          required: ['findingIds'],
-          additionalProperties: false,
-        },
-        annotations: { readOnlyHint: false },
-        execute: async input => {
-          if (!isRecord(input)) return webMcpError('Provide findingIds from get_safety_findings after reviewing them.');
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          const selected = stringArrayInput(input, 'findingIds', 100, 100);
-          if (selected === null || !selected.length) return webMcpError('findingIds must be a non-empty array of at most 100 strings.');
-          const known = new Set(runtime.safetyFindings.map(finding => finding.id));
-          const unknown = selected.filter(id => !known.has(id));
-          if (unknown.length) return webMcpError(`Unknown finding ID: ${unknown[0]}`);
-          const result = redactFindingsSafely(runtime.markdown, runtime.safetyFindings, new Set(selected));
-          if (result.staleIds.length) return webMcpError('The document changed after these findings were produced. Read the refreshed findings and try again.');
-          runtime.replaceMarkdown(result.text);
-          syncWebMcpDocument(runtime, result.text);
-          return webMcpResult({
-            redacted: result.redactedIds.length,
-            overlapMerged: result.overlapMergedIds.length,
-            updated: true,
-            remainingFindingCount: runtime.safetyFindings.length,
-          });
-        },
-      },
-      {
-        name: 'copy_converted_text',
-        title: 'Copy converted text',
-        description: 'After the person approves the current handoff in Insights, copy the converted output to the user’s clipboard using the same visible Copy action as the human UI.',
-        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: false },
-        execute: async () => {
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          if (!runtime.plainText) return webMcpError('There is no converted output to copy.');
-          if (!runtime.handoffApproved) return webMcpError('Human approval is required in the Insights panel before an agent can copy this document.');
-          const copied = await runtime.handleCopy();
-          if (!copied) return webMcpError('The browser did not allow clipboard access.');
-          return webMcpResult({ copied: true, characters: runtime.plainText.length });
-        },
-      },
-      {
-        name: 'download_converted_text',
-        title: 'Download converted text',
-        description: 'After the person approves the current handoff in Insights, download the converted output as a local .txt file using the app’s visible export action.',
-        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: false },
-        execute: async () => {
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          if (!runtime.plainText) return webMcpError('There is no converted output to download.');
-          if (!runtime.handoffApproved) return webMcpError('Human approval is required in the Insights panel before an agent can export this document.');
-          runtime.handleExportText();
-          return webMcpResult({ downloadStarted: true, filename: 'converted-text.txt' });
-        },
-      },
-      {
-        name: 'clear_document',
-        title: 'Clear document',
-        description: 'Clear the current document, scan results, imported-file state, and conversion output from the visible editor.',
-        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: false },
-        execute: async () => {
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          runtime.handleClear();
-          syncWebMcpDocument(runtime, '');
-          return webMcpResult({ cleared: true });
-        },
-      },
-      {
-        name: 'insert_sample_document',
-        title: 'Insert sample document',
-        description: 'Insert the app’s sample Markdown document to demonstrate conversion, references, assets, and safety insights.',
-        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: false },
-        execute: async () => {
-          const runtime = getRuntime();
-          if (!runtime) return webMcpError('The editor is not ready.');
-          runtime.insertSample();
-          syncWebMcpDocument(runtime, SAMPLE_MARKDOWN);
-          return webMcpResult({ inserted: true, markdownLength: SAMPLE_MARKDOWN.length });
-        },
-      },
-    ];
-
+    const tools = createWebMcpTools(getRuntime, SAMPLE_MARKDOWN);
     const registerTools = async () => {
-      const results = await Promise.all(tools.map(async tool => {
-        try {
-          await document.modelContext!.registerTool(tool, { signal: controller.signal });
-          return true;
-        } catch (error) {
-          if (!controller.signal.aborted) console.warn(`WebMCP tool registration failed for ${tool.name}:`, error);
-          return false;
-        }
-      }));
-      if (!controller.signal.aborted) {
-        setWebMcpStatus(results.some(Boolean) ? 'ready' : 'error');
+      const registration = await registerWebMcpTools(
+        modelContext,
+        tools,
+        controller,
+        (toolName, error) => console.warn(`WebMCP tool registration failed for ${toolName}:`, error),
+      );
+      if (registration.status === 'ready' && registration.count === tools.length) {
+        setWebMcpRegisteredCount(registration.count);
+        setWebMcpStatus('ready');
+      } else if (registration.status === 'failed') {
+        setWebMcpRegisteredCount(0);
+        setWebMcpStatus('error');
       }
     };
 
@@ -1365,7 +859,6 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
 
   const totalAssetsCount = assets.length + safetyFindings.length + conversion.brokenReferences.length;
   const isDeepScanning = deepScanStatus === 'loading' || deepScanStatus === 'scanning';
-  const isSemanticScanning = semanticStatus === 'loading' || semanticStatus === 'analyzing';
   const modelFindingCount = safetyFindings.filter(finding => finding.source === 'local-ai').length;
   const safetyStatus = deferredMarkdown !== markdown
     ? 'Quick scan…'
@@ -1565,7 +1058,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                     </span>
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2.5 py-1" aria-live="polite">
                       <span className={`h-1.5 w-1.5 rounded-full ${webMcpStatus === 'ready' ? 'bg-emerald-300' : 'bg-indigo-300'}`} />
-                      {webMcpStatus === 'ready' ? `${WEBMCP_TOOL_COUNT} tools ready` : 'WebMCP progressive enhancement'}
+                      {webMcpStatus === 'ready' ? `${webMcpRegisteredCount} tools ready` : 'WebMCP progressive enhancement'}
                     </span>
                   </div>
                   <h2 className="mt-3 max-w-xl text-xl font-bold tracking-tight sm:text-2xl">Turn messy documents into context an agent can use safely.</h2>
@@ -1629,11 +1122,11 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                 }`} aria-live="polite">
                   <span className={`h-1.5 w-1.5 rounded-full ${webMcpStatus === 'ready' ? 'bg-emerald-500' : webMcpStatus === 'error' ? 'bg-amber-500' : 'bg-zinc-400'}`} />
                   {webMcpStatus === 'ready'
-                    ? `${WEBMCP_TOOL_COUNT} tools discovered`
+                    ? `${webMcpRegisteredCount} tools discovered`
                     : webMcpStatus === 'unsupported'
                       ? 'Site tools unavailable here'
                       : webMcpStatus === 'error'
-                        ? 'Tool discovery failed'
+                        ? `${webMcpRegisteredCount}/${WEBMCP_TOOL_COUNT} tools registered`
                         : 'Checking this browser…'}
                 </span>
               </div>
@@ -2092,7 +1585,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                         className="w-full min-h-[40px] rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white transition-colors hover:bg-emerald-700"
                       >
                         <ShieldCheck className="mr-1.5 inline h-3.5 w-3.5" />
-                        Approve this version for agent export
+                        Approve this version for agent access
                       </button>
                     )}
                     {handoffSummary.humanApprovalGranted && (
@@ -2147,7 +1640,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                                 ? deepScanProgress === null ? 'Preparing private model…' : `Downloading model… ${deepScanProgress}%`
                                 : `Checking document… ${deepScanProgress ?? 0}%`}
                             </span>
-                            <button data-track-button="deep_scan_cancel" onClick={cancelDeepScan} className="font-bold inline-flex items-center gap-1 hover:text-indigo-900 min-h-[28px] px-1">
+                            <button data-track-button="deep_scan_cancel" onClick={() => cancelDeepScan()} className="font-bold inline-flex items-center gap-1 hover:text-indigo-900 min-h-[28px] px-1">
                               <Square className="w-2.5 h-2.5 fill-current" /> Cancel
                             </button>
                           </div>
@@ -2275,96 +1768,6 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                         No obvious secrets, private data, hidden text, or injection instructions detected locally.
                       </div>
                     )}
-                  </div>
-
-                  {/* Optional semantic structure insights */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                        <Search className="w-3.5 h-3.5 text-violet-600" />
-                        Semantic Insights
-                      </div>
-                      {semanticStatus === 'complete' && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-violet-50 text-violet-700">
-                          {semanticMatches.length ? `${semanticMatches.length} similar` : 'No duplicates'}
-                        </span>
-                      )}
-                    </div>
-                    <div className="rounded-2xl border border-violet-100 bg-violet-50/40 p-3.5 space-y-3">
-                      <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-white border border-violet-100 text-violet-600 flex items-center justify-center shrink-0">
-                          {isSemanticScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-bold text-zinc-900">Find similar passages</span>
-                            <span className="text-[9px] uppercase font-black tracking-wide bg-white text-violet-600 px-1.5 py-0.5 rounded-md border border-violet-100">Optional</span>
-                          </div>
-                          <p className="text-[10px] text-zinc-500 leading-relaxed mt-1">
-                            Compare substantial paragraphs locally to spot repetition before you publish or study.
-                          </p>
-                        </div>
-                      </div>
-
-                      {isSemanticScanning && (
-                        <div className="space-y-1.5" aria-live="polite">
-                          <div className="h-1.5 rounded-full bg-white overflow-hidden border border-violet-100" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={semanticProgress ?? undefined}>
-                            <div
-                              className={`h-full bg-violet-600 rounded-full transition-[width] duration-300 ${semanticProgress === null ? 'w-1/3 animate-pulse' : ''}`}
-                              style={semanticProgress === null ? undefined : { width: `${semanticProgress}%` }}
-                            />
-                          </div>
-                          <div className="flex items-center justify-between gap-2 text-[10px] text-violet-700">
-                            <span>{semanticStatus === 'loading' ? semanticProgress === null ? 'Preparing local embeddings…' : `Downloading model… ${semanticProgress}%` : `Comparing passages… ${semanticProgress ?? 0}%`}</span>
-                            <button data-track-button="semantic_cancel" onClick={cancelSemanticScan} className="font-bold inline-flex items-center gap-1 hover:text-violet-900 min-h-[28px] px-1"><Square className="w-2.5 h-2.5 fill-current" /> Cancel</button>
-                          </div>
-                        </div>
-                      )}
-
-                      {semanticStatus === 'complete' && (
-                        semanticMatches.length > 0 ? (
-                          <div className="space-y-2">
-                            {semanticMatches.map(match => (
-                              <div key={`${match.first.id}-${match.second.id}`} className="rounded-xl bg-white/80 border border-violet-100 px-3 py-2.5 space-y-2">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[9px] uppercase font-black tracking-wide text-violet-700">{formatSemanticScore(match.score)}</span>
-                                  <span className="text-[9px] text-zinc-400">Paragraphs {match.first.id + 1} & {match.second.id + 1}</span>
-                                </div>
-                                <p className="text-[10px] text-zinc-600 leading-relaxed">{match.first.text.replace(/\s+/g, ' ').slice(0, 150)}{match.first.text.length > 150 ? '…' : ''}</p>
-                                <p className="text-[10px] text-zinc-600 leading-relaxed border-t border-violet-50 pt-2">{match.second.text.replace(/\s+/g, ' ').slice(0, 150)}{match.second.text.length > 150 ? '…' : ''}</p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="rounded-xl bg-white/80 border border-violet-100 px-3 py-2 text-[10px] text-violet-700">
-                            No likely duplicate passages found across {semanticSegmentCount} substantial paragraphs.
-                          </div>
-                        )
-                      )}
-
-                      {semanticStatus === 'error' && (
-                        <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2 text-[10px] text-red-700">
-                          <p>{semanticError}</p>
-                          <button data-track-button="semantic_retry" onClick={handleSemanticScan} className="font-bold mt-1.5 min-h-[28px] hover:text-red-900">Retry analysis</button>
-                        </div>
-                      )}
-
-                      {!isSemanticScanning && semanticStatus !== 'complete' && semanticStatus !== 'error' && (
-                        <button
-                          data-track-button="semantic_run"
-                          onClick={handleSemanticScan}
-                          disabled={!markdown.trim()}
-                          className="w-full min-h-[40px] rounded-xl bg-violet-600 text-white text-xs font-bold hover:bg-violet-700 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        >
-                          <Search className="w-3.5 h-3.5" />
-                          {semanticModelReady ? 'Analyze similar passages' : `Enable semantic insights · ~${SEMANTIC_MODEL_DOWNLOAD_MB} MB`}
-                        </button>
-                      )}
-                      <div className="flex items-start gap-1.5 text-[9px] text-zinc-400 leading-relaxed">
-                        <Lock className="w-3 h-3 shrink-0 mt-px text-emerald-600" />
-                        <span>Paragraph embeddings are computed inside this browser; document text is not uploaded. {semanticRuntime && `Using ${semanticRuntime === 'webgpu' ? 'WebGPU acceleration' : 'compatibility mode'}.`}</span>
-                      </div>
-                    </div>
                   </div>
 
                   {conversion.brokenReferences.length > 0 && (

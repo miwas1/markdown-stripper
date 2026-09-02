@@ -12,10 +12,6 @@ const models = [
     revision: '6cb4e77c2b2c7f81e731b88cffa9b7a6fc675a4c',
     onnxFiles: ['onnx/model_quantized.onnx'],
   },
-  {
-    id: 'mixedbread-ai/mxbai-embed-xsmall-v1',
-    revision: 'e6ac24e5d6efb8782b59de1647b3ececb4ece94e',
-  },
 ];
 const languages = ['eng', 'fra', 'deu', 'spa', 'ita', 'nld', 'por'];
 const coreFiles = [

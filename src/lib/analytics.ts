@@ -9,12 +9,11 @@ export type UsageEvent =
   | 'document_import'
   | 'ocr_complete'
   | 'privacy_scan_complete'
-  | 'semantic_scan_complete'
   | 'redact_findings';
 
 export interface UsageDimensions {
   button?: ButtonName;
-  feature?: 'live_editor' | 'clipboard' | 'download' | 'import' | 'ocr' | 'privacy_scan' | 'semantic_scan' | 'redaction';
+  feature?: 'live_editor' | 'clipboard' | 'download' | 'import' | 'ocr' | 'privacy_scan' | 'redaction';
   variant?: 'plain' | 'readable' | 'ai' | 'txt' | 'docx' | 'markdown' | 'text' | 'html' | 'pdf' | 'image';
   sizeBucket?: 'tiny' | 'small' | 'medium' | 'large';
   outcome?: 'success' | 'error';

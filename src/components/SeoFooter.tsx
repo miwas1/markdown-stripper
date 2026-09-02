@@ -16,7 +16,7 @@ export const SeoFooter: React.FC = () => {
               <span className="text-white font-bold tracking-tight text-base">MarkDown Stripper</span>
             </a>
             <p className="text-xs text-zinc-400 leading-relaxed max-w-sm">
-              The free, instant browser tool to convert Markdown and documents into clean text with optional private OCR, PII scanning, and semantic insights.
+              The free, instant browser tool to convert Markdown and documents into clean text with optional private OCR and PII scanning.
             </p>
             <div className="flex items-center gap-2 text-xs text-emerald-400 font-medium pt-1">
               <ShieldCheck className="w-3.5 h-3.5" />
@@ -45,7 +45,7 @@ export const SeoFooter: React.FC = () => {
               <li><span className="text-zinc-300">CommonMark & GitHub Flavored Markdown</span></li>
               <li><span className="text-zinc-300">Asset & Link Extractor</span></li>
               <li><span className="text-zinc-300">Scanned PDF & Image OCR</span></li>
-              <li><span className="text-zinc-300">Local PII & Semantic Scan</span></li>
+              <li><span className="text-zinc-300">Local PII Scan</span></li>
             </ul>
           </div>
 

@@ -3,7 +3,6 @@ import test from 'node:test';
 import { convertDocument } from './converter';
 import { detectOcrLanguage } from './language';
 import { makeTokenAwareChunks, mergeSafetyFindings, modelEntitiesToFindings, resolveModelEntitySpans } from './pii';
-import { extractSemanticSegments } from './semantic';
 import { redactFindings, redactFindingsSafely, scanDocument } from './scanner';
 import { summarizeAgentHandoff } from './handoff';
 import {
@@ -224,14 +223,11 @@ test('exact scanner findings take priority over overlapping model findings', () 
   assert.ok(merged.every(finding => finding.source === 'rule'));
 });
 
-test('language detection gives a safe OCR default and semantic segmentation ignores code fragments', () => {
+test('language detection gives a safe OCR default', () => {
   const detection = detectOcrLanguage('This is a sufficiently long English paragraph about course notes and document processing. It contains enough words for a stable language suggestion.');
   assert.equal(detection.code, 'eng');
   assert.equal(detection.detected, true);
 
-  const segments = extractSemanticSegments('Short.\n\nThis is a substantial paragraph that should be compared with another paragraph because it contains enough context for semantic analysis.\n\n```js\nconst ignored = true;\n```');
-  assert.equal(segments.length, 1);
-  assert.match(segments[0].text, /substantial paragraph/);
 });
 
 test('agent handoff readiness stays review-first and content-free', () => {
