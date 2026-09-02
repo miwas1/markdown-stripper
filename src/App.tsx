@@ -9,6 +9,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { SeoContent } from './components/SeoContent';
 import { SeoFooter } from './components/SeoFooter';
+import { LanguageSwitcher } from './components/LanguageSwitcher';
+import { useI18n } from './i18n/I18nProvider';
 import { ImageRedactionWorkspace } from './components/ImageRedactionWorkspace';
 import { installButtonTracking, sizeBucket, trackEvent } from './lib/analytics';
 import { convertDocument } from './lib/document/converter';
@@ -79,6 +81,7 @@ const result = convertDocument(text, { mode: 'readable' });
 `;
 
 export default function App() {
+  const { t } = useI18n();
   const [markdown, setMarkdown] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -882,20 +885,21 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
               </div>
               <div>
                 <h1 className="text-base sm:text-lg font-bold tracking-tight text-zinc-900 leading-tight">MarkDown Stripper</h1>
-                <p className="text-[10px] text-zinc-400 font-medium hidden sm:block">Private document handoff for people + agents</p>
+                <p className="text-[10px] text-zinc-400 font-medium hidden sm:block">{t('brand.tagline')}</p>
               </div>
             </div>
 
             <nav className="hidden lg:flex items-center gap-5 text-xs font-medium text-zinc-500 pl-4 border-l border-zinc-200">
-              <a href="#features" className="hover:text-indigo-600 transition-colors">Features</a>
-              <a href="#how-to-use" className="hover:text-indigo-600 transition-colors">How It Works</a>
-              <a href="#syntax-reference" className="hover:text-indigo-600 transition-colors">Syntax Matrix</a>
-              <a href="#use-cases" className="hover:text-indigo-600 transition-colors">Use Cases</a>
-              <a href="#faq" className="hover:text-indigo-600 transition-colors">FAQ</a>
+              <a href="#features" className="hover:text-indigo-600 transition-colors">{t('nav.features')}</a>
+              <a href="#how-to-use" className="hover:text-indigo-600 transition-colors">{t('nav.how')}</a>
+              <a href="#syntax-reference" className="hover:text-indigo-600 transition-colors">{t('nav.syntax')}</a>
+              <a href="#use-cases" className="hover:text-indigo-600 transition-colors">{t('nav.cases')}</a>
+              <a href="#faq" className="hover:text-indigo-600 transition-colors">{t('nav.faq')}</a>
             </nav>
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
+            <LanguageSwitcher compact />
             {/* Sample & Upload Buttons (Desktop) */}
             <div className="hidden md:flex items-center gap-1 border-l pl-2 border-zinc-200">
               <button
@@ -903,7 +907,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                 onClick={insertSample}
                 className="text-xs font-medium text-zinc-600 hover:text-indigo-600 transition-colors px-2.5 py-2 rounded-lg hover:bg-zinc-100 min-h-[40px]"
               >
-                Sample
+                {t('action.sample')}
               </button>
               <button
                 data-track-button="import_desktop"
@@ -912,7 +916,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                 className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-indigo-600 transition-colors px-2.5 py-2 rounded-lg hover:bg-zinc-100 min-h-[40px] disabled:opacity-50"
               >
                 {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                <span>{isImporting ? 'Importing' : 'Upload'}</span>
+                <span>{isImporting ? t('action.importing') : t('action.upload')}</span>
               </button>
             </div>
 
@@ -971,7 +975,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                   className="flex items-center justify-center gap-2 text-xs font-semibold bg-zinc-100 text-zinc-700 p-3 rounded-xl min-h-[44px] hover:bg-zinc-200 active:scale-98"
                 >
                   <FileText className="w-4 h-4 text-indigo-600" />
-                  <span>Insert Sample</span>
+                  <span>{t('action.insertSample')}</span>
                 </button>
                 <button
                   data-track-button="import_mobile_menu"
@@ -983,7 +987,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                   className="flex items-center justify-center gap-2 text-xs font-semibold bg-zinc-100 text-zinc-700 p-3 rounded-xl min-h-[44px] hover:bg-zinc-200 active:scale-98 disabled:opacity-50"
                 >
                   {isImporting ? <Loader2 className="w-4 h-4 animate-spin text-zinc-600" /> : <Upload className="w-4 h-4 text-zinc-600" />}
-                  <span>{isImporting ? 'Importing' : 'Upload File'}</span>
+                  <span>{isImporting ? t('action.importing') : t('action.uploadFile')}</span>
                 </button>
                 <button
                   data-track-button="clear_mobile_menu"
@@ -995,7 +999,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                   className="flex items-center justify-center gap-2 text-xs font-semibold bg-red-50 text-red-600 p-3 rounded-xl min-h-[44px] hover:bg-red-100 active:scale-98 disabled:opacity-40"
                 >
                   <Trash2 className="w-4 h-4 text-red-500" />
-                  <span>Clear All</span>
+                  <span>{t('action.clearAll')}</span>
                 </button>
               </div>
 
@@ -1005,35 +1009,35 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="py-2.5 px-3 rounded-lg hover:bg-zinc-50 hover:text-indigo-600 transition-colors"
                 >
-                  Features
+                  {t('nav.features')}
                 </a>
                 <a 
                   href="#how-to-use" 
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="py-2.5 px-3 rounded-lg hover:bg-zinc-50 hover:text-indigo-600 transition-colors"
                 >
-                  How It Works
+                  {t('nav.how')}
                 </a>
                 <a 
                   href="#syntax-reference" 
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="py-2.5 px-3 rounded-lg hover:bg-zinc-50 hover:text-indigo-600 transition-colors"
                 >
-                  Syntax Matrix
+                  {t('nav.syntax')}
                 </a>
                 <a 
                   href="#use-cases" 
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="py-2.5 px-3 rounded-lg hover:bg-zinc-50 hover:text-indigo-600 transition-colors"
                 >
-                  Use Cases
+                  {t('nav.cases')}
                 </a>
                 <a 
                   href="#faq" 
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="py-2.5 px-3 rounded-lg hover:bg-zinc-50 hover:text-indigo-600 transition-colors"
                 >
-                  FAQ
+                  {t('nav.faq')}
                 </a>
               </div>
             </motion.div>
@@ -1200,9 +1204,9 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                     >
                       <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-white' : 'text-indigo-600'}`} />
                       <span className="text-left">
-                        <span className="block text-xs sm:text-sm font-bold">{mode.label}</span>
+                        <span className="block text-xs sm:text-sm font-bold">{t(`mode.${mode.id}` as 'mode.plain')}</span>
                         <span className={`hidden sm:block text-[10px] mt-0.5 ${active ? 'text-indigo-100' : 'text-zinc-400'}`}>
-                          {mode.description}
+                          {t(`mode.${mode.id}Description` as 'mode.plainDescription')}
                         </span>
                       </span>
                     </button>
@@ -1220,7 +1224,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                 }`}
               >
                 <CheckSquare className="w-4 h-4" />
-                References at bottom
+                {t('mode.references')}
                 {conversion.references.length > 0 && (
                   <span className="bg-white/80 px-1.5 py-0.5 rounded-full text-[10px]">{conversion.references.length}</span>
                 )}
@@ -1309,7 +1313,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                 }`}
               >
                 <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Input</span>
+                <span>{t('view.input')}</span>
               </button>
               <button
                 data-track-button="mobile_output_tab"
@@ -1319,7 +1323,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                 }`}
               >
                 <Eye className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Output</span>
+                <span>{t('view.output')}</span>
               </button>
               <button
                 data-track-button="mobile_both_tab"
@@ -1329,7 +1333,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                 }`}
               >
                 <Columns className="w-3.5 h-3.5 text-zinc-500" />
-                <span>Split</span>
+                <span>{t('view.split')}</span>
               </button>
             </div>
 
@@ -1341,7 +1345,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                   onClick={insertSample}
                   className="text-xs font-semibold bg-white border border-zinc-200 text-zinc-700 px-3 py-2 rounded-xl min-h-[40px] hover:bg-zinc-50 active:scale-95 whitespace-nowrap"
                 >
-                  Sample
+                  {t('action.sample')}
                 </button>
                 <button
                   data-track-button="import_mobile"
@@ -1350,7 +1354,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                   className="flex items-center gap-1 text-xs font-semibold bg-white border border-zinc-200 text-zinc-700 px-3 py-2 rounded-xl min-h-[40px] hover:bg-zinc-50 active:scale-95 whitespace-nowrap disabled:opacity-50"
                 >
                   {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" /> : <Upload className="w-3.5 h-3.5 text-zinc-500" />}
-                  <span>{isImporting ? 'Importing' : 'Upload'}</span>
+                  <span>{isImporting ? t('action.importing') : t('action.upload')}</span>
                 </button>
               </div>
 
@@ -1381,7 +1385,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                 <div className="px-3 sm:px-4 py-3 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/70">
                   <div className="flex items-center gap-2 text-zinc-700">
                     <Type className="w-4 h-4 text-indigo-600" />
-                    <span className="text-xs font-bold uppercase tracking-wider">Markdown Input</span>
+                    <span className="text-xs font-bold uppercase tracking-wider">{t('editor.input')}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {(markdown || imageFile) && (
@@ -1402,14 +1406,14 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                   <div className="bg-red-50 border-b border-red-100 px-4 py-2.5 flex items-center gap-2 text-red-600 text-xs font-medium">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span className="flex-1">{error}</span>
-                    <button data-track-button="dismiss_error" onClick={() => setError(null)} className="ml-auto hover:text-red-800 uppercase text-[10px] font-bold py-1 px-2">Dismiss</button>
+                    <button data-track-button="dismiss_error" onClick={() => setError(null)} className="ml-auto hover:text-red-800 uppercase text-[10px] font-bold py-1 px-2">{t('action.dismiss')}</button>
                   </div>
                 )}
 
                 <textarea
                   value={markdown}
                   onChange={(e) => setMarkdown(e.target.value)}
-                  placeholder="Paste Markdown or drop MD, TXT, HTML, DOCX, PDF, or an image..."
+                  placeholder={t('editor.placeholder')}
                   className="flex-1 p-4 sm:p-6 resize-none focus:outline-none text-zinc-800 font-mono text-base sm:text-sm leading-relaxed placeholder:text-zinc-300 min-h-[300px] sm:min-h-[380px]"
                 />
                 
@@ -1433,7 +1437,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                   <div className="flex items-center gap-2 text-zinc-700">
                     <ArrowRightLeft className="w-4 h-4 text-emerald-600" />
                     <span className="text-xs font-bold uppercase tracking-wider">
-                      {conversionMode === 'plain' ? 'Plain Text' : conversionMode === 'readable' ? 'Readable Text' : 'AI-ready Context'}
+                      {conversionMode === 'plain' ? t('editor.outputPlain') : conversionMode === 'readable' ? t('editor.outputReadable') : t('editor.outputAi')}
                     </span>
                   </div>
                   <div className="flex items-center gap-1 sm:gap-2">
@@ -1472,7 +1476,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                       aria-label="Copy plain text to clipboard"
                     >
                       {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      <span>{copied ? 'Copied!' : 'Copy'}</span>
+                      <span>{copied ? t('action.copied') : t('action.copy')}</span>
                     </button>
                   </div>
                 </div>
@@ -1487,7 +1491,7 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                       <div className="w-12 h-12 rounded-full border-2 border-dashed border-zinc-200 flex items-center justify-center animate-pulse">
                         <ArrowRightLeft className="w-5 h-5 text-zinc-400" />
                       </div>
-                      <p className="text-xs sm:text-sm font-medium text-zinc-400">Converted plain text appears here automatically</p>
+                      <p className="text-xs sm:text-sm font-medium text-zinc-400">{t('editor.empty')}</p>
                     </div>
                   )}
                 </div>
@@ -1812,16 +1816,16 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
           <div className="flex items-center gap-4 sm:gap-6">
             <span className="flex items-center gap-2 font-mono">
               <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-              <span>Words: <strong className="text-zinc-800">{markdown.trim() ? markdown.trim().split(/\s+/).length : 0}</strong></span>
+              <span>{t('stats.words')}: <strong className="text-zinc-800">{markdown.trim() ? markdown.trim().split(/\s+/).length : 0}</strong></span>
             </span>
             <span className="flex items-center gap-2 font-mono">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>Characters: <strong className="text-zinc-800">{markdown.length}</strong></span>
+              <span>{t('stats.characters')}: <strong className="text-zinc-800">{markdown.length}</strong></span>
             </span>
             {assets.length > 0 && (
               <span className="hidden xs:flex items-center gap-2 font-mono">
                 <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                <span>Assets: <strong className="text-zinc-800">{assets.length}</strong></span>
+                <span>{t('stats.assets')}: <strong className="text-zinc-800">{assets.length}</strong></span>
               </span>
             )}
           </div>

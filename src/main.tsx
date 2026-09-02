@@ -3,6 +3,7 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { LegalPage } from './components/LegalPage.tsx';
 import './index.css';
+import { I18nProvider } from './i18n/I18nProvider.tsx';
 
 const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
 const page = pathname === '/privacy'
@@ -13,6 +14,6 @@ const page = pathname === '/privacy'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {page}
+    <I18nProvider>{page}</I18nProvider>
   </StrictMode>,
 );

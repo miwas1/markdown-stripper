@@ -1,7 +1,10 @@
 import React from 'react';
 import { FileText, ShieldCheck } from 'lucide-react';
+import { LanguageSwitcher } from './LanguageSwitcher';
+import { useI18n } from '../i18n/I18nProvider';
 
 export const SeoFooter: React.FC = () => {
+  const { t } = useI18n();
   return (
     <footer className="w-full bg-zinc-900 text-zinc-400 text-sm border-t border-zinc-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
@@ -20,13 +23,13 @@ export const SeoFooter: React.FC = () => {
             </p>
             <div className="flex items-center gap-2 text-xs text-emerald-400 font-medium pt-1">
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Core features process locally</span>
+              <span>{t('footer.local')}</span>
             </div>
           </div>
 
           {/* Quick Links */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">Features</h4>
+            <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">{t('footer.features')}</h4>
             <ul className="space-y-2.5 text-xs">
               <li><a href="/#features" className="hover:text-indigo-400 transition-colors py-1 block">Real-Time Markdown Stripper</a></li>
               <li><a href="/#how-to-use" className="hover:text-indigo-400 transition-colors py-1 block">How to Convert Guide</a></li>
@@ -38,7 +41,7 @@ export const SeoFooter: React.FC = () => {
 
           {/* Conversions & Formats */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">Supported Formats</h4>
+            <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">{t('footer.formats')}</h4>
             <ul className="space-y-2 text-xs">
               <li><span className="text-zinc-300">Markdown (.md) to Plain Text (.txt)</span></li>
               <li><span className="text-zinc-300">Markdown to Word Document (.docx)</span></li>
@@ -51,7 +54,7 @@ export const SeoFooter: React.FC = () => {
 
           {/* SEO Tag Cloud */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">Popular Searches</h4>
+            <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">{t('footer.searches')}</h4>
             <div className="flex flex-wrap gap-1.5">
               <span className="text-[10px] bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-md">Markdown to Text</span>
               <span className="text-[10px] bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-md">Remove Markdown Tags</span>
@@ -66,14 +69,15 @@ export const SeoFooter: React.FC = () => {
 
         {/* Bottom Bar */}
         <div className="pt-6 sm:pt-8 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500 text-center sm:text-left">
-          <p>© {new Date().getFullYear()} MarkDown Stripper. All rights reserved. Free & Open online utility.</p>
+          <p>© {new Date().getFullYear()} MarkDown Stripper. {t('footer.rights')}</p>
           <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-            <a href="/privacy" className="hover:text-zinc-300 transition-colors p-1">Privacy policy</a>
-            <a href="/terms" className="hover:text-zinc-300 transition-colors p-1">Terms of use</a>
+            <a href="/privacy" className="hover:text-zinc-300 transition-colors p-1">{t('footer.privacy')}</a>
+            <a href="/terms" className="hover:text-zinc-300 transition-colors p-1">{t('footer.terms')}</a>
             <a href="/robots.txt" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 transition-colors p-1">robots.txt</a>
             <a href="/sitemap.xml" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 transition-colors p-1">sitemap.xml</a>
             <a href="/site.webmanifest" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 transition-colors p-1">manifest</a>
           </div>
+          <LanguageSwitcher />
         </div>
       </div>
     </footer>
