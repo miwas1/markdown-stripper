@@ -153,6 +153,7 @@ export default function App() {
   const [conversionMode, setConversionMode] = useState<ConversionMode>('readable');
   const [appendReferences, setAppendReferences] = useState(true);
   const [selectedFindingIds, setSelectedFindingIds] = useState<Set<string>>(new Set());
+  const [findingIdsCopied, setFindingIdsCopied] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
@@ -238,6 +239,10 @@ export default function App() {
     }),
     [markdown, plainText, conversionMode, appendReferences, conversion.references, conversion.brokenReferences, safetyFindings, deepScanStatus, importWarnings, handoffApproved],
   );
+
+  useEffect(() => {
+    setFindingIdsCopied(false);
+  }, [selectedFindingIds]);
 
   useEffect(() => {
     if (approvedHandoffFingerprint !== null && approvedHandoffFingerprint !== approvalFingerprint) {
@@ -681,6 +686,28 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
       return false;
     }
   }, [plainText]);
+
+  const handleCopyFindingIds = useCallback(async () => {
+    const selectedIds = safetyFindings
+      .filter(finding => selectedFindingIds.has(finding.id))
+      .map(finding => finding.id);
+    if (!selectedIds.length) return false;
+
+    try {
+      await navigator.clipboard.writeText(`[${selectedIds.join(', ')}]`);
+      setFindingIdsCopied(true);
+      trackEvent('copy_text', {
+        feature: 'clipboard',
+        sizeBucket: sizeBucket(selectedIds.join(', ').length),
+        outcome: 'success',
+      });
+      setTimeout(() => setFindingIdsCopied(false), 2000);
+      return true;
+    } catch (err) {
+      console.error('Failed to copy finding IDs!', err);
+      return false;
+    }
+  }, [safetyFindings, selectedFindingIds]);
 
   const handleClear = useCallback(() => {
     cancelDeepScan();
@@ -1140,50 +1167,50 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
               <div className="relative grid gap-5 lg:grid-cols-[1.15fr_1fr] lg:items-center">
                 <div>
                   <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-200">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-2.5 py-1">
-                      <Bot className="h-3.5 w-3.5" />
-                      Human + agent workflow
-                    </span>
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2.5 py-1" aria-live="polite">
                       <span className={`h-1.5 w-1.5 rounded-full ${webMcpStatus === 'ready' ? 'bg-emerald-300' : 'bg-indigo-300'}`} />
-                      {webMcpStatus === 'ready' ? `${webMcpRegisteredCount} tools ready` : 'WebMCP progressive enhancement'}
+                      {webMcpStatus === 'ready'
+                        ? `${webMcpRegisteredCount} tools ready`
+                        : webMcpStatus === 'checking'
+                          ? 'Checking tools…'
+                          : 'Site tools'}
                     </span>
                   </div>
-                  <h2 className="mt-3 max-w-xl text-xl font-bold tracking-tight sm:text-2xl">Turn messy documents into context an agent can use safely.</h2>
+                  <h2 className="mt-3 max-w-xl text-xl font-bold tracking-tight sm:text-2xl">Clean documents for a safe agent handoff.</h2>
                   <p className="mt-2 max-w-2xl text-xs leading-relaxed text-indigo-100 sm:text-sm">
-                    You import and review the document. An agent can inspect the same live editor, prepare AI-ready output, surface local privacy findings, redact selected values, and hand the final decision back to you.
+                    Review locally, prepare AI-ready output, check privacy, redact selected values, and approve the final handoff.
                   </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => setShowAssets(true)}
                       className="inline-flex min-h-[40px] items-center gap-2 rounded-xl bg-white px-3.5 py-2 text-xs font-bold text-indigo-900 transition-colors hover:bg-indigo-50"
                     >
                       <ShieldCheck className="h-3.5 w-3.5" />
-                      Open local insights
+                      Open insights
                     </button>
                     <a
                       href="#connect-agent"
                       className="inline-flex min-h-[40px] items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-white/15"
                     >
                       <Bot className="h-3.5 w-3.5" />
-                      Connect your agent
+                      Connect agent
                     </a>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-white/15 bg-white/10 p-3.5 backdrop-blur-sm sm:p-4">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-indigo-200">Try in ChatGPT’s in-app browser</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-indigo-200">Try it in ChatGPT</p>
                   <p className="mt-2 rounded-xl border border-white/10 bg-black/10 px-3 py-2.5 font-mono text-[11px] leading-relaxed text-white sm:text-xs">
-                    “Prepare this document for an agent handoff, check readiness, and tell me what I should review.”
+                    “Prepare this document, check privacy, and tell me what to review.”
                   </p>
                   <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] text-indigo-100">
                     <div className="rounded-xl border border-white/10 bg-white/5 p-2.5"><span className="font-black text-white">1</span><br />Inspect</div>
                     <div className="rounded-xl border border-white/10 bg-white/5 p-2.5"><span className="font-black text-white">2</span><br />Protect</div>
                     <div className="rounded-xl border border-white/10 bg-white/5 p-2.5"><span className="font-black text-white">3</span><br />Export</div>
                   </div>
-                  <p className="mt-3 text-[10px] leading-relaxed text-indigo-200" aria-live="polite">
-                    Current page: <span className="font-bold text-white">{handoffSummary.headline}</span>
+                  <p className="mt-2 text-[10px] leading-relaxed text-indigo-200" aria-live="polite">
+                    <span className="font-bold text-white">{handoffSummary.headline}</span>
                   </p>
                 </div>
               </div>
@@ -1194,11 +1221,11 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                 <div className="max-w-2xl">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-indigo-600">
                     <Bot className="h-3.5 w-3.5" />
-                    Site tools setup
+                    Agent setup
                   </div>
-                  <h2 id="connect-agent-title" className="mt-1.5 text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">Connect your agent—no MCP configuration required</h2>
+                  <h2 id="connect-agent-title" className="mt-1.5 text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">Connect an agent—no setup required</h2>
                   <p className="mt-1.5 text-xs leading-relaxed text-zinc-600 sm:text-sm">
-                    MarkDown Stripper uses page-local WebMCP Site tools. A compatible agent discovers them when this page is open; there is no server URL, command, or JSON snippet to install.
+                    Compatible agents discover this page’s local tools automatically—no server or JSON setup.
                   </p>
                 </div>
                 <span className={`inline-flex min-h-[30px] shrink-0 items-center gap-1.5 self-start rounded-full px-2.5 text-[10px] font-bold ${
@@ -1219,24 +1246,24 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                 </span>
               </div>
 
-              <div className="mt-4 grid gap-3 lg:grid-cols-3">
+              <div className="mt-3 grid gap-3 lg:grid-cols-3">
                 <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3.5">
                   <div className="flex items-center gap-2">
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-black text-white">1</span>
-                    <h3 className="text-xs font-bold text-zinc-900">Open in ChatGPT desktop</h3>
+                    <h3 className="text-xs font-bold text-zinc-900">Open in ChatGPT</h3>
                   </div>
                   <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
-                    Update the ChatGPT desktop app, use ChatGPT Work or Codex with a Site-tools-capable model—currently GPT-5.6 Sol or Terra—and open this page in its built-in browser.
+                    Use ChatGPT desktop’s built-in browser with a supported model.
                   </p>
                 </div>
 
                 <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3.5">
                   <div className="flex items-center gap-2">
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-black text-white">2</span>
-                    <h3 className="text-xs font-bold text-zinc-900">Check, then ask</h3>
+                    <h3 className="text-xs font-bold text-zinc-900">Verify tools</h3>
                   </div>
                   <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
-                    Select <strong>Site tools</strong> in the browser address bar and inspect <strong>Available site tools</strong>. Then ask: “Prepare this document for an agent handoff and tell me what I should review.”
+                    Open <strong>Site tools</strong> → <strong>Available site tools</strong>, then use the prompt above.
                   </p>
                 </div>
 
@@ -1246,25 +1273,28 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                     <h3 className="text-xs font-bold text-zinc-900">Other MCP clients</h3>
                   </div>
                   <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
-                    Traditional MCP clients cannot add these page-local tools through configuration yet because this project does not expose a remote MCP server. They can still use the normal website interface.
+                    Traditional MCP clients can use the website normally; these local tools require a compatible browser.
                   </p>
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-col gap-2 rounded-xl border border-zinc-100 bg-zinc-50 px-3.5 py-3 text-[10px] leading-relaxed text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
-                <p>
-                  <strong className="text-zinc-700">Developer preview:</strong> Chrome 149+ can test the page after enabling <code className="rounded bg-white px-1 py-0.5 font-mono text-zinc-700">chrome://flags/#enable-webmcp-testing</code> and relaunching. Availability in ChatGPT depends on app version, model, workspace, and rollout; Site tools are currently unavailable in Enterprise and Edu workspaces.
-                </p>
-                <a
-                  href="https://learn.chatgpt.com/docs/webmcp"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex min-h-[32px] shrink-0 items-center gap-1.5 self-start rounded-lg border border-zinc-200 bg-white px-2.5 font-bold text-indigo-700 hover:border-indigo-200 hover:text-indigo-900 sm:self-center"
-                >
-                  Official Site tools guide
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              </div>
+              <details className="mt-3 rounded-xl border border-zinc-100 bg-zinc-50 px-3.5 py-2.5 text-[10px] leading-relaxed text-zinc-500">
+                <summary className="cursor-pointer font-bold text-zinc-700">Developer testing & support</summary>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p>
+                    Chrome 149+ can test the page with <code className="rounded bg-white px-1 py-0.5 font-mono text-zinc-700">chrome://flags/#enable-webmcp-testing</code> enabled. ChatGPT availability varies by app, model, workspace, and rollout; Site tools are unavailable in Enterprise and Edu workspaces.
+                  </p>
+                  <a
+                    href="https://learn.chatgpt.com/docs/webmcp"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-[32px] shrink-0 items-center gap-1.5 self-start rounded-lg border border-zinc-200 bg-white px-2.5 font-bold text-indigo-700 hover:border-indigo-200 hover:text-indigo-900 sm:self-center"
+                  >
+                    Site tools guide
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </details>
             </section>
 
             {/* Purpose-aware conversion controls */}
@@ -1791,14 +1821,28 @@ Reach out at \`support@markdown-stripper.site\` or open an issue on [GitHub](htt
                             Select all
                           </button>
                           {selectedFindingIds.size > 0 && (
-                            <button
-                              data-track-button="redact_findings"
-                              onClick={handleRedactSelected}
-                              disabled={deferredMarkdown !== markdown}
-                              className="ml-auto bg-zinc-900 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-wait"
-                            >
-                              Redact {selectedFindingIds.size}
-                            </button>
+                            <div className="ml-auto flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                data-track-button="copy_finding_ids"
+                                onClick={() => void handleCopyFindingIds()}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50"
+                                title="Copy selected finding IDs to paste into chat"
+                                aria-label="Copy selected finding IDs to paste into chat"
+                              >
+                                {findingIdsCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                                {findingIdsCopied ? t('action.findingIdsCopied') : t('action.copyFindingIds')}
+                              </button>
+                              <button
+                                type="button"
+                                data-track-button="redact_findings"
+                                onClick={handleRedactSelected}
+                                disabled={deferredMarkdown !== markdown}
+                                className="bg-zinc-900 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-wait"
+                              >
+                                Redact {selectedFindingIds.size}
+                              </button>
+                            </div>
                           )}
                         </div>
                         <div className="space-y-2">

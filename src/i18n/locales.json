@@ -3,7 +3,7 @@
     "language.name": "English", "language.label": "Language", "language.select": "Select website language",
     "brand.tagline": "Private document handoff for people + agents",
     "nav.features": "Features", "nav.how": "How It Works", "nav.syntax": "Syntax Matrix", "nav.cases": "Use Cases", "nav.faq": "FAQ",
-    "action.sample": "Sample", "action.insertSample": "Insert Sample", "action.upload": "Upload", "action.uploadFile": "Upload File", "action.importing": "Importing", "action.clearAll": "Clear All", "action.copy": "Copy", "action.copied": "Copied!", "action.dismiss": "Dismiss",
+    "action.sample": "Sample", "action.insertSample": "Insert Sample", "action.upload": "Upload", "action.uploadFile": "Upload File", "action.importing": "Importing", "action.clearAll": "Clear All", "action.copy": "Copy", "action.copied": "Copied!", "action.copyFindingIds": "Copy selected IDs", "action.findingIdsCopied": "IDs copied!", "action.dismiss": "Dismiss",
     "editor.input": "Markdown Input", "editor.outputPlain": "Plain Text", "editor.outputReadable": "Readable Text", "editor.outputAi": "AI-ready Context", "editor.placeholder": "Paste Markdown or drop MD, TXT, HTML, DOCX, PDF, or an image...", "editor.empty": "Your cleaned text will appear here",
     "view.input": "Input", "view.output": "Output", "view.split": "Split",
     "mode.plain": "Plain", "mode.plainDescription": "Maximum cleanup", "mode.readable": "Readable", "mode.readableDescription": "Preserve useful structure", "mode.ai": "AI-ready", "mode.aiDescription": "Safe structured context", "mode.references": "References at bottom",

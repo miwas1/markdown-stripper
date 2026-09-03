@@ -21,14 +21,14 @@ The difficult part of sharing a document with an agent is not only removing Mark
 MarkDown Stripper makes that a shared workflow:
 
 1. A person pastes or imports Markdown, TXT, HTML, DOCX, PDF, or an image.
-2. An agent reads bounded document state and calls `prepare_agent_handoff`.
+2. An agent reads the document status and prepares a handoff.
 3. The page switches to AI-ready context and opens local Insights for the person.
-4. The agent runs the optional local privacy scan and checks `get_handoff_readiness`, while the person reviews privacy findings, OCR warnings, references, and the visible output.
+4. The agent runs the optional local privacy scan and checks whether the handoff is ready, while the person reviews privacy findings, OCR warnings, references, and the visible output.
 5. If anything is redacted, the scan is rerun for the new document version. The person then explicitly approves that exact version in Insights; only then can the agent read content-bearing results, copy text, or request a local TXT download.
 
 For the full privacy handoff demo, click **Sensitive HTML** to load the built-in synthetic HTML document, then try this prompt:
 
-> Prepare this document for an agent handoff, check readiness, and tell me what I should review. Do not share or export anything until I approve it.
+> Please get this document ready to share with an AI assistant, check whether it is safe, and tell me what I need to review. Do not show, copy, download, or share the document until I approve it.
 
 ## Use it from the ChatGPT desktop app
 
@@ -57,34 +57,35 @@ Site tools are tied to the page that provides them, so keep the MarkDown Strippe
 Send this prompt in the same ChatGPT conversation:
 
 ```text
-Use the MarkDown Stripper Site tools on the document currently open in the browser.
+Please inspect the document currently open in MarkDown Stripper and prepare it
+for a safe handoff.
 
-1. Call get_document_state.
-2. Call prepare_agent_handoff with appendReferences=true.
-3. Call get_handoff_readiness.
-4. Run the local privacy scan with run_deep_privacy_scan.
-5. Read the privacy findings with get_safety_findings, following nextCursor when needed.
-   For each finding, include its id, type, severity, line, and placeholder.
+Set the output up as clear, AI-ready context, keep useful references, and open
+the Insights panel. Run the local privacy check and tell me what it finds. For
+each finding, include its ID, the kind of issue, its severity, line number, and
+suggested placeholder so I can match it to the items in Insights.
 
-Do not call get_converted_text, list_document_assets, copy_converted_text,
-or download_converted_text yet. Do not share document content. Report only
-what the human needs to review in the Insights panel.
+Do not show the document's contents, copy anything, or download anything yet.
+Only tell me what the human needs to review in the Insights panel. Choose the
+page's available capabilities yourself; I do not need to name them.
 ```
 
 ChatGPT should use the page tools and report structured results. The page should switch to **AI-ready**, open **Insights**, and show a readiness state of **Review**.
 
 ### Let the human choose what to redact
 
-When ChatGPT lists the findings, match their type, severity, and line to the findings visible in **Insights**. Do not ask ChatGPT to redact everything automatically. Choose what to redact, then use the corresponding IDs from ChatGPT’s tool result:
+When ChatGPT lists the findings, match their type, severity, and line to the findings visible in **Insights**. Do not ask ChatGPT to redact everything automatically. Select only the items you want removed, click **Copy selected IDs**, and paste the copied list into ChatGPT with this request:
 
 ```text
-I reviewed the finding IDs [PASTE_REVIEWED_IDS_HERE] in Insights.
-Redact only those exact findings with redact_document_findings, then run
-run_deep_privacy_scan again for the changed document and check
-get_handoff_readiness. Do not read or export document content.
+I reviewed these exact items in the Insights panel. The IDs I selected are:
+PASTE_COPIED_IDS_HERE
+
+Please remove only those selected items from the document, then check the
+updated document again and tell me whether anything else needs review. Do not
+show, copy, download, or share document contents yet.
 ```
 
-The visible editor should contain placeholders such as `[EMAIL_1]` or `[SECRET_1]`. Because the document changed, the previous approval must disappear and the scan must be run again.
+The button copies only the selected finding IDs, not the sensitive values. The visible editor should contain placeholders such as `[EMAIL_1]` or `[SECRET_1]`. Because the document changed, the previous approval must disappear and the scan must be run again.
 
 ### Approve, then allow the agent to read
 
@@ -93,10 +94,12 @@ After the scan is complete and readiness passes, review the visible AI-ready out
 Then send:
 
 ```text
-The human approved this exact document version in Insights.
-Call get_converted_text with maxCharacters=200 and show the bounded result.
-Continue only from nextCursor if necessary. Then call list_document_assets
-with its default page size. Do not request more content than needed.
+I approved this exact cleaned version in the Insights panel.
+
+Please show me no more than 200 characters of the cleaned document. If there
+is more to read, continue only when needed. Also give me the document's links
+and other references, using a small default page size. Do not request more
+content than necessary.
 ```
 
 Only after approval should ChatGPT be able to read converted text, list content-bearing assets, copy the output, or start a local TXT download. Before approval, those operations should reject without returning document content.
@@ -106,10 +109,10 @@ Only after approval should ChatGPT be able to read converted text, list content-
 For a short demo, load **Sensitive HTML** yourself, then send:
 
 ```text
-Use the MarkDown Stripper Site tools to inspect this document, prepare an
-AI-ready handoff, run the local privacy scan, and tell me which findings I
-should review. Do not return document content, redact anything, or export
-anything until I explicitly approve specific finding IDs and then approve the
+Please inspect the document currently open in MarkDown Stripper, prepare it as
+AI-ready context, run the local privacy check, and tell me which findings I
+should review. Keep the document contents private. Do not redact, copy,
+download, or share anything until I choose specific finding IDs and approve the
 exact cleaned version in Insights.
 ```
 
@@ -126,7 +129,7 @@ Show ChatGPT’s tool activity when available, the changing page state, the bloc
 
 ## WebMCP tools
 
-All tools are registered imperatively on the top-level page with `document.modelContext.registerTool(...)`. Tool inputs are narrow JSON Schemas, document text is bounded, content-bearing results are marked untrusted, and mutations reuse the same React actions as the human UI.
+You can describe the result you want in ordinary language; the agent should choose the page capabilities it needs. The names below are technical reference documentation, not names you need to include in a prompt. All tools are registered imperatively on the top-level page with `document.modelContext.registerTool(...)`. Tool inputs are narrow JSON Schemas, document text is bounded, content-bearing results are marked untrusted, and mutations reuse the same React actions as the human UI.
 
 | Tool | Type | Purpose |
 | --- | --- | --- |

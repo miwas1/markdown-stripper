@@ -35,6 +35,7 @@ export const BUTTON_NAMES = [
   'deep_scan_retry',
   'deep_scan_run',
   'select_all_findings',
+  'copy_finding_ids',
   'redact_findings',
   'faq_toggle',
 ] as const;
