@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     
     <!-- Primary Meta Tags -->
-    <title>MarkDown Stripper - Private WebMCP Document Handoff</title>
-    <meta name="title" content="MarkDown Stripper - Private WebMCP Document Handoff" />
-    <meta name="description" content="Prepare Markdown and documents for people and browser agents with local conversion, OCR, privacy review, AI-ready output, and WebMCP tools." />
-    <meta name="keywords" content="markdown stripper, WebMCP, agent-native documents, private document handoff, markdown to plain text, remove markdown formatting, markdown cleaner, markdown to docx, scanned pdf OCR, private PII scanner" />
+    <title>MarkDown Stripper - Private Document Handoff &amp; Redaction</title>
+    <meta name="title" content="MarkDown Stripper - Private Document Handoff &amp; Redaction" />
+    <meta name="description" content="Prepare Markdown and documents with local conversion, OCR, PII detection, selective redaction, AI-ready output, and WebMCP tools." />
+    <meta name="keywords" content="markdown stripper, WebMCP, agent-native documents, private document handoff, markdown to plain text, remove markdown formatting, markdown cleaner, markdown to docx, scanned pdf OCR, private PII scanner, document redaction, PII redaction" />
     <meta name="author" content="MarkDown Stripper" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="googlebot" content="index, follow" />
@@ -29,8 +29,8 @@
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://markdown-stripper.site/" />
-    <meta property="og:title" content="MarkDown Stripper - Private WebMCP Document Handoff" />
-    <meta property="og:description" content="Prepare clean, private, AI-ready document context with a human-in-the-loop WebMCP workflow." />
+    <meta property="og:title" content="MarkDown Stripper - Private Document Handoff &amp; Redaction" />
+    <meta property="og:description" content="Prepare clean, private, AI-ready document context with local PII detection, selective redaction, and a human-in-the-loop WebMCP workflow." />
     <meta property="og:site_name" content="MarkDown Stripper" />
     <meta property="og:locale" content="en_US" />
     <meta property="og:image" content="https://markdown-stripper.site/og-image.svg" />
@@ -42,8 +42,8 @@
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="https://markdown-stripper.site/" />
-    <meta name="twitter:title" content="MarkDown Stripper - Private WebMCP Document Handoff" />
-    <meta name="twitter:description" content="Prepare clean, private, AI-ready document context with a human-in-the-loop WebMCP workflow." />
+    <meta name="twitter:title" content="MarkDown Stripper - Private Document Handoff &amp; Redaction" />
+    <meta name="twitter:description" content="Prepare clean, private, AI-ready document context with local PII detection, selective redaction, and a human-in-the-loop WebMCP workflow." />
     <meta name="twitter:image" content="https://markdown-stripper.site/og-image.svg" />
 
     <!-- Structured Data (JSON-LD) for Search Engines -->
@@ -59,7 +59,7 @@
             "applicationCategory": "UtilitiesApplication",
             "operatingSystem": "All",
             "browserRequirements": "Requires JavaScript. Requires HTML5.",
-            "description": "Prepare Markdown and documents for people and browser agents with local conversion, OCR, privacy review, AI-ready output, and WebMCP tools.",
+            "description": "Prepare Markdown and documents with local conversion, OCR, PII detection, selective redaction, AI-ready output, and WebMCP tools.",
             "offers": {
               "@type": "Offer",
               "price": "0",
@@ -74,6 +74,7 @@
               "Reference links resolved and arranged at the bottom",
               "Local OCR for scanned PDF pages and images",
               "Optional local PII and privacy scanning",
+              "Human-reviewed selective redaction for text and image regions",
               "Imperative WebMCP tools for agent-assisted document handoff",
               "File drag-and-drop support for Markdown, TXT, HTML, DOCX, PDF, and image files",
               "Word and character statistics counter"
@@ -81,8 +82,8 @@
           },
           {
             "@type": "HowTo",
-            "name": "How to Convert Markdown to Plain Text Online",
-            "description": "Quickly convert Markdown or uploaded documents into clean text, then optionally review OCR, privacy findings, and references locally.",
+            "name": "How to Convert Markdown to Clean, Private Text Online",
+            "description": "Quickly convert Markdown or uploaded documents into clean text, review privacy findings, and selectively redact sensitive content locally.",
             "step": [
               {
                 "@type": "HowToStep",
@@ -98,9 +99,15 @@
               },
               {
                 "@type": "HowToStep",
-                "name": "Copy or Export Result",
-                "text": "Click Copy to copy the result or download a clean .txt or .docx file.",
+                "name": "Review and Redact",
+                "text": "Open Insights, review local privacy findings, and selectively replace sensitive values with labeled placeholders before sharing.",
                 "position": 3
+              },
+              {
+                "@type": "HowToStep",
+                "name": "Copy or Export Result",
+                "text": "After reviewing the changed document, copy it or download a clean .txt or .docx file.",
+                "position": 4
               }
             ]
           },
@@ -152,7 +159,15 @@
                 "name": "Can it detect private information before I share text with AI?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "The instant scanner checks exact secrets, contact patterns, hidden content, and possible prompt injection. An optional local English PII model adds contextual name, address, identity, and health-information suggestions for review."
+                  "text": "The instant scanner checks exact secrets, contact patterns, hidden content, and possible prompt injection. An optional local English PII model adds contextual name, address, identity, and health-information suggestions for review and selective redaction."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I redact privacy findings before sharing?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Review local findings in Insights, select the items to remove, and click Redact. Text values are replaced with labeled placeholders in the browser, while image regions can be masked with OCR suggestions or manual boxes."
                 }
               },
               {

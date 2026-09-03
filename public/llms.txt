@@ -13,6 +13,7 @@ MarkDown Stripper converts GitHub Flavored Markdown (GFM), CommonMark, LLM outpu
 - **Purpose-Aware Modes**: Plain, Readable, and AI-ready output from one fast local conversion pipeline.
 - **Reference Resolution**: Resolves inline and reference-style links, reports broken definitions, and arranges sources at the bottom.
 - **Safety & Privacy Scan**: Instantly flags exact secrets, personal data, invisible text, hidden comments, and possible prompt injection. An optional browser-only English PII model adds a deeper contextual scan without uploading the document.
+- **Selective Redaction**: Review local findings and replace selected text with labeled placeholders, or mask image regions with OCR suggestions and manual boxes before export.
 - **Document Import**: Local Markdown, TXT, HTML, DOCX, PDF, PNG, JPG, JPEG, WEBP, BMP, and GIF extraction with lazy-loaded parsers.
 - **Private OCR**: Scanned PDF pages and images can be converted to selectable text locally with language suggestions, page progress, and confidence warnings.
 - **Drag & Drop**: Native file input and drag-and-drop support for Markdown, documents, and images.

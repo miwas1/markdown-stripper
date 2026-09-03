@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   ShieldCheck, Zap, FileOutput, Search,
   ChevronDown, CheckCircle2, 
-  FileText, Layers, Sparkles, Bot
+  FileText, Layers, Sparkles, Bot, ScanSearch
 } from 'lucide-react';
 
 interface FaqItem {
@@ -42,6 +42,10 @@ const FAQS: FaqItem[] = [
   {
     question: "What does the Safety & Privacy scanner check?",
     answer: "The instant local scanner flags likely credentials, personal data, invisible Unicode, hidden HTML comments, encoded payloads, and possible prompt-injection instructions. After page load, a compact English PII model is prepared during browser idle time and cached for optional deep scans of contextual names, addresses, and identity details without uploading the document. Findings can be selectively redacted, but no scanner is a security guarantee."
+  },
+  {
+    question: "Can I redact privacy findings before sharing?",
+    answer: "Yes. Review the local findings in Insights, select only the items you want to remove, and click Redact. Text values are replaced with labeled placeholders in your browser; images can be masked with OCR suggestions or manual boxes. The changed document should be scanned and approved again before agent access or export."
   },
   {
     question: "Why should I convert Markdown to Plain Text?",
@@ -92,7 +96,7 @@ export const SeoContent: React.FC = () => {
             What is MarkDown Stripper?
           </h2>
           <p className="text-zinc-700 text-sm sm:text-base leading-relaxed">
-            <strong>MarkDown Stripper</strong> (<a href="https://markdown-stripper.site" className="text-indigo-600 font-medium hover:underline">markdown-stripper.site</a>) is a zero-latency, privacy-focused online utility that removes Markdown syntax formatting—including headings, asterisks, bold/italics, code fences, blockquotes, LaTeX markers, and HTML tags—from raw text to generate clean, readable plain text. It also imports documents and images, offers private OCR for scans, optional PII review, automatic asset extraction (hyperlinks, images, emails), and direct export to <strong>.TXT</strong> and <strong>Microsoft Word (.DOCX)</strong> files directly within your browser.
+            <strong>MarkDown Stripper</strong> (<a href="https://markdown-stripper.site" className="text-indigo-600 font-medium hover:underline">markdown-stripper.site</a>) is a zero-latency, privacy-focused online utility that removes Markdown syntax formatting—including headings, asterisks, bold/italics, code fences, blockquotes, LaTeX markers, and HTML tags—from raw text to generate clean, readable plain text. It also imports documents and images, offers private OCR for scans, local PII detection with selective redaction, automatic asset extraction (hyperlinks, images, emails), and direct export to <strong>.TXT</strong> and <strong>Microsoft Word (.DOCX)</strong> files directly within your browser.
           </p>
         </section>
 
@@ -127,7 +131,7 @@ export const SeoContent: React.FC = () => {
               </div>
               <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Local-First Privacy</h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
-                Your content is processed directly in your browser session. Core conversion, OCR, and privacy scanning keep document text on your device.
+                Your content is processed directly in your browser session. Core conversion, OCR, privacy scanning, and redaction keep document text on your device.
               </p>
             </div>
 
@@ -168,8 +172,17 @@ export const SeoContent: React.FC = () => {
               <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Private OCR for Scans</h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
                 Recover printed text from scanned PDF pages and images locally, with language suggestions, page progress, confidence warnings, and manual review.
-                </p>
+              </p>
+            </div>
+
+            <div className="p-5 sm:p-6 rounded-2xl border border-zinc-100 bg-zinc-50/50 hover:border-rose-100 hover:bg-white hover:shadow-md transition-all">
+              <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center mb-4 shadow-rose-100 shadow-lg">
+                <ScanSearch className="w-5 h-5" />
               </div>
+              <h3 className="text-base sm:text-lg font-bold text-zinc-900 mb-2">Local PII Detection & Redaction</h3>
+              <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
+                Find secrets, personal data, hidden content, and injection signals locally. Review findings, replace selected text with placeholders, or mask image regions before sharing.
+              </p>
             </div>
 
             <div className="p-5 sm:p-6 rounded-2xl border border-zinc-100 bg-zinc-50/50 hover:border-indigo-100 hover:bg-white hover:shadow-md transition-all">
@@ -181,6 +194,7 @@ export const SeoContent: React.FC = () => {
                 Give browser agents precise tools for the same live document while a human reviews privacy, references, and the final export.
               </p>
             </div>
+          </div>
         </section>
 
         {/* How It Works Section */}
@@ -190,14 +204,14 @@ export const SeoContent: React.FC = () => {
               Step-by-Step Guide
             </span>
             <h2 className="text-2xl sm:text-3xl font-bold text-zinc-900 mt-3 tracking-tight">
-              How to Convert Markdown to Clean Plain Text Online
+              How to Convert Markdown to Clean, Private Text Online
             </h2>
             <p className="text-zinc-600 text-sm sm:text-base mt-2">
-              Transform formatted Markdown files or text snippets into unformatted plain text in three simple steps.
+              Transform formatted Markdown files or text snippets into clean text, then review and redact sensitive content before sharing.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
             <div className="flex flex-col space-y-3 bg-zinc-50 p-5 sm:p-6 rounded-2xl border border-zinc-200/80">
               <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-indigo-100 shadow-md">
                 1
@@ -222,9 +236,19 @@ export const SeoContent: React.FC = () => {
               <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-indigo-100 shadow-md">
                 3
               </div>
+              <h3 className="text-base sm:text-lg font-semibold text-zinc-900">Review & Redact</h3>
+              <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
+                Open Insights, review local privacy findings, and selectively replace sensitive values with labeled placeholders before sharing.
+              </p>
+            </div>
+
+            <div className="flex flex-col space-y-3 bg-zinc-50 p-5 sm:p-6 rounded-2xl border border-zinc-200/80">
+              <div className="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-indigo-100 shadow-md">
+                4
+              </div>
               <h3 className="text-base sm:text-lg font-semibold text-zinc-900">Copy or Download</h3>
               <p className="text-zinc-600 text-xs sm:text-sm leading-relaxed">
-                Click <strong>Copy</strong> for instant clipboard access or download the result as a <code className="font-mono text-xs bg-zinc-200 px-1 py-0.5 rounded">.txt</code> or <code className="font-mono text-xs bg-zinc-200 px-1 py-0.5 rounded">.docx</code> file.
+                After reviewing the changed document, copy it or download the result as a <code className="font-mono text-xs bg-zinc-200 px-1 py-0.5 rounded">.txt</code> or <code className="font-mono text-xs bg-zinc-200 px-1 py-0.5 rounded">.docx</code> file.
               </p>
             </div>
           </div>

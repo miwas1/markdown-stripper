@@ -32,7 +32,7 @@ The app is a React/Vite SPA served by a Cloudflare Worker. The top-level React p
 
 ### Try it
 
-Open the live URL in ChatGPT’s in-app browser, insert the sample document, and ask:
+Open the live URL in ChatGPT’s in-app browser, click **Sensitive HTML**, and ask:
 
 > Prepare this document for an agent handoff, check readiness, and tell me what I should review. Do not share or export anything until I approve it.
 
@@ -43,11 +43,11 @@ Use a clean browser profile, show the live URL, record narration, and keep backg
 | Time | Screen action | Narration |
 | --- | --- | --- |
 | 0:00–0:15 | Open the live app and show the WebMCP workflow banner | “This is MarkDown Stripper: a private document handoff workspace. People keep control of the document while agents get precise tools for the same live page.” |
-| 0:15–0:35 | Insert Sample; point to the converted output and extracted assets | “The human starts with a messy Markdown document. The app converts it locally, preserves useful structure, and extracts links, images, and email addresses.” |
+| 0:15–0:35 | Click Sensitive HTML; point to the converted output and extracted assets | “The human starts with a messy HTML export containing synthetic contact, billing, credential, and hidden-content examples. The app converts it locally, preserves useful structure, and extracts the reviewable signals.” |
 | 0:35–0:55 | Open site-tools/inspector and show the registered tools | “WebMCP exposes typed operations instead of making an agent guess at buttons. There are read tools for state, output, assets, privacy findings, and handoff readiness.” |
 | 0:55–1:15 | Ask the agent to prepare the handoff | “I ask the agent to prepare an agent handoff. It calls the page tool, switches the visible output to AI-ready context, appends references, and opens Insights.” |
 | 1:15–1:35 | Start the local deep scan and call readiness | “The agent checks readiness without pulling the whole document first. The result reports whether the local privacy scan is complete and what the person should review.” |
-| 1:35–1:55 | Show findings, redact the sample email, and start the new-version scan | “The person reviews a stable finding ID. The agent can redact only that reviewed finding, and the page requires a fresh local scan for the changed document.” |
+| 1:35–1:55 | Show findings, redact one reviewed email or credential, and start the new-version scan | “The person reviews a stable finding ID. The agent can redact only that reviewed finding, and the page requires a fresh local scan for the changed document.” |
 | 1:55–2:10 | Show clean readiness, then click the human approval button | “Once the new scan is clear, the person approves this exact visible version. Export remains blocked until that human checkpoint.” |
 | 2:10–2:22 | Call `get_converted_text` with a bounded limit; show output | “Now the agent can request a bounded, clearly marked untrusted output for summarization or a next step.” |
 | 2:22–2:30 | Show copy/download controls and privacy note | “The document never goes to telemetry or the model asset host. Humans and agents share the workflow, but the human keeps the final say.” |
@@ -55,7 +55,7 @@ Use a clean browser profile, show the live URL, record narration, and keep backg
 ## Judge test script
 
 1. Open the live URL in ChatGPT’s in-app browser. If using Chrome, use version 149+ and enable `chrome://flags/#enable-webmcp-testing`.
-2. Click `Sample` or call `insert_sample_document`.
+2. Click `Sensitive HTML` for the full privacy demo, or click `Sample` / call `insert_sample_document` for the smaller baseline document.
 3. Ask the agent to call `get_document_state`. Expected: structured lengths, mode, references, and scan status; no full document dump.
 4. Ask the agent to call `prepare_agent_handoff`. Expected: visible mode becomes `AI-ready`, references are enabled, and Insights opens.
 5. Ask the agent to call `get_handoff_readiness`. Expected: a checklist with `readiness`, `checks`, privacy counts, and next steps; no document text in the result.

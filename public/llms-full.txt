@@ -3,7 +3,7 @@
 Website: https://markdown-stripper.site
 Canonical URL: https://markdown-stripper.site/
 Application Type: UtilitiesApplication / WebApplication
-Primary Purpose: High-speed, client-side Markdown syntax stripping, clean text conversion, local OCR, privacy review, and DOCX document export.
+Primary Purpose: High-speed, client-side Markdown syntax stripping, clean text conversion, local OCR, privacy review, selective redaction, and DOCX document export.
 
 ---
 
@@ -18,6 +18,7 @@ All conversion and parsing happens client-side using JavaScript in the user's br
 - Scanned PDF pages and images can be OCR processed in the browser with page progress, confidence warnings, automatic language suggestions, and a manual language selector.
 - The instant privacy scan uses deterministic checks for credentials, contact patterns, hidden content, encoded payloads, and possible prompt injection.
 - An optional local English PII model adds contextual findings for names, addresses, identity information, financial data, and health information. Findings are reviewable before redaction.
+- Reviewed text findings can be selectively replaced with labeled placeholders, while image regions can be masked with OCR suggestions or manual boxes before local PNG export.
 
 ---
 

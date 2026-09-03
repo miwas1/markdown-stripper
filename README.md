@@ -26,9 +26,103 @@ MarkDown Stripper makes that a shared workflow:
 4. The agent runs the optional local privacy scan and checks `get_handoff_readiness`, while the person reviews privacy findings, OCR warnings, references, and the visible output.
 5. If anything is redacted, the scan is rerun for the new document version. The person then explicitly approves that exact version in Insights; only then can the agent read content-bearing results, copy text, or request a local TXT download.
 
-Try this prompt after inserting the sample document:
+For the full privacy handoff demo, click **Sensitive HTML** to load the built-in synthetic HTML document, then try this prompt:
 
 > Prepare this document for an agent handoff, check readiness, and tell me what I should review. Do not share or export anything until I approve it.
+
+## Use it from the ChatGPT desktop app
+
+MarkDown Stripper uses page-local WebMCP Site tools. You do not install an MCP server or paste a tool configuration into ChatGPT. ChatGPT discovers the tools while the live page is open in its built-in desktop browser. See the [official ChatGPT Site tools guide](https://learn.chatgpt.com/docs/webmcp).
+
+### Before you start
+
+- Use the latest ChatGPT desktop app and its built-in browser.
+- Use a model that supports Site tools. The current OpenAI guide lists GPT-5.6 Sol and GPT-5.6 Terra; availability depends on account rollout and workspace settings.
+- Site tools are not currently available in Enterprise or Edu workspaces.
+- Use only the synthetic values in the built-in demo. Never paste real personal data, credentials, or private documents into a recording.
+
+### Open the app and verify WebMCP
+
+1. Start a new ChatGPT conversation in the desktop app.
+2. Open the built-in browser from the ChatGPT toolbar.
+3. Navigate to <https://markdown-stripper.site>.
+4. Wait for the dark **Human + agent workflow** banner to show **14 tools ready**.
+5. In the browser address bar, open **Site tools → Available site tools** to confirm that the tools belong to the MarkDown Stripper page.
+6. Click **Sensitive HTML** in the page to load the synthetic document. This is the only setup click needed for the full demo.
+
+Site tools are tied to the page that provides them, so keep the MarkDown Stripper tab open while ChatGPT works. If the tools are not visible, reload the page in the built-in browser and check that Site tools are enabled in the browser permissions.
+
+### Ask ChatGPT to prepare the document
+
+Send this prompt in the same ChatGPT conversation:
+
+```text
+Use the MarkDown Stripper Site tools on the document currently open in the browser.
+
+1. Call get_document_state.
+2. Call prepare_agent_handoff with appendReferences=true.
+3. Call get_handoff_readiness.
+4. Run the local privacy scan with run_deep_privacy_scan.
+5. Read the privacy findings with get_safety_findings, following nextCursor when needed.
+   For each finding, include its id, type, severity, line, and placeholder.
+
+Do not call get_converted_text, list_document_assets, copy_converted_text,
+or download_converted_text yet. Do not share document content. Report only
+what the human needs to review in the Insights panel.
+```
+
+ChatGPT should use the page tools and report structured results. The page should switch to **AI-ready**, open **Insights**, and show a readiness state of **Review**.
+
+### Let the human choose what to redact
+
+When ChatGPT lists the findings, match their type, severity, and line to the findings visible in **Insights**. Do not ask ChatGPT to redact everything automatically. Choose what to redact, then use the corresponding IDs from ChatGPT’s tool result:
+
+```text
+I reviewed the finding IDs [PASTE_REVIEWED_IDS_HERE] in Insights.
+Redact only those exact findings with redact_document_findings, then run
+run_deep_privacy_scan again for the changed document and check
+get_handoff_readiness. Do not read or export document content.
+```
+
+The visible editor should contain placeholders such as `[EMAIL_1]` or `[SECRET_1]`. Because the document changed, the previous approval must disappear and the scan must be run again.
+
+### Approve, then allow the agent to read
+
+After the scan is complete and readiness passes, review the visible AI-ready output and click **Approve this version for agent access** in Insights. The human must perform this step; ChatGPT cannot bypass the approval gate.
+
+Then send:
+
+```text
+The human approved this exact document version in Insights.
+Call get_converted_text with maxCharacters=200 and show the bounded result.
+Continue only from nextCursor if necessary. Then call list_document_assets
+with its default page size. Do not request more content than needed.
+```
+
+Only after approval should ChatGPT be able to read converted text, list content-bearing assets, copy the output, or start a local TXT download. Before approval, those operations should reject without returning document content.
+
+### One-prompt recording version
+
+For a short demo, load **Sensitive HTML** yourself, then send:
+
+```text
+Use the MarkDown Stripper Site tools to inspect this document, prepare an
+AI-ready handoff, run the local privacy scan, and tell me which findings I
+should review. Do not return document content, redact anything, or export
+anything until I explicitly approve specific finding IDs and then approve the
+exact cleaned version in Insights.
+```
+
+Show ChatGPT’s tool activity when available, the changing page state, the blocked pre-approval read, the selected redaction, the fresh scan, and the final bounded read after human approval.
+
+### If ChatGPT does not use the tools
+
+- Confirm the live page is open in the ChatGPT desktop app’s built-in browser, not an ordinary browser tab or the ChatGPT web app.
+- Confirm the banner says **14 tools ready** and the address bar lists **Available site tools**.
+- Update the ChatGPT desktop app and select a supported model.
+- Reload the page after changing models or browser permissions.
+- Keep the page open; Site tools are page-scoped.
+- If the page still has no Site tools, use the normal editor UI or test the WebMCP registration in Chrome with the WebMCP testing flag enabled.
 
 ## WebMCP tools
 
