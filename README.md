@@ -89,7 +89,7 @@ The button copies only the selected finding IDs, not the sensitive values. The v
 
 ### Approve, then allow the agent to read
 
-After the scan is complete and readiness passes, review the visible AI-ready output and click **Approve this version for agent access** in Insights. The human must perform this step; ChatGPT cannot bypass the approval gate.
+After the scan is complete and readiness passes, review the visible AI-ready output and click **Approve this version for agent access** in Insights. If warnings such as unresolved Markdown references remain, Insights also offers **Approve anyway and continue** so the human can explicitly accept them. The human must perform this step; ChatGPT cannot bypass the approval gate.
 
 Then send:
 

@@ -86,6 +86,9 @@ export function summarizeAgentHandoff(input: AgentHandoffInput): AgentHandoffSum
   if (!noBrokenReferences) nextSteps.push(`Review ${input.brokenReferences.length} broken reference${input.brokenReferences.length === 1 ? '' : 's'}.`);
   if (input.importWarnings.length > 0) nextSteps.push('Review import warnings for reading-order or OCR limitations.');
   if (contentChecksPass && !input.humanApprovalGranted) nextSteps.push('Review the visible output, then approve the handoff in Insights before an agent can read content, copy, or export.');
+  if (input.humanApprovalGranted && !contentChecksPass) {
+    nextSteps.push('Human approval was granted with unresolved checks; the agent may access this exact version, but readiness remains in review.');
+  }
   if (agentHandoffReady) nextSteps.push('The visible document is approved for agent-assisted access and export.');
 
   const readiness: HandoffReadiness = !hasDocument ? 'empty' : agentHandoffReady ? 'ready' : 'review';
@@ -93,6 +96,8 @@ export function summarizeAgentHandoff(input: AgentHandoffInput): AgentHandoffSum
     ? 'Waiting for a document'
     : readiness === 'ready'
       ? 'Approved for an agent-assisted handoff'
+      : input.humanApprovalGranted
+        ? 'Approved with unresolved checks'
       : contentChecksPass
         ? 'Human approval is the last step'
       : 'Human review is still needed';

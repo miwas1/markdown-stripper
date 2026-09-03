@@ -271,6 +271,17 @@ test('agent handoff readiness stays review-first and content-free', () => {
   const approved = summarizeAgentHandoff({ ...cleanInput, humanApprovalGranted: true });
   assert.equal(approved.readiness, 'ready');
   assert.equal(approved.agentHandoffReady, true);
+
+  const approvedWithBrokenReference = summarizeAgentHandoff({
+    ...cleanInput,
+    brokenReferences: ['missing-doc'],
+    humanApprovalGranted: true,
+  });
+  assert.equal(approvedWithBrokenReference.contentChecksPass, false);
+  assert.equal(approvedWithBrokenReference.humanApprovalGranted, true);
+  assert.equal(approvedWithBrokenReference.readiness, 'review');
+  assert.equal(approvedWithBrokenReference.agentHandoffReady, false);
+  assert.match(approvedWithBrokenReference.headline, /Approved with unresolved checks/);
 });
 
 test('OCR word boxes retain exact character offsets and normalize to image coordinates', () => {

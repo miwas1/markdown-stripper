@@ -60,6 +60,8 @@ Use the sample document or [fixtures/02-safety-and-pii.txt](fixtures/02-safety-a
 11. Call `get_converted_text` with `{"maxCharacters": 40}`. Confirm the chunk is at most 40 characters, then continue from `nextCursor`. Call `list_document_assets` and follow its `nextCursor`; confirm each page has at most two items and long fields are explicitly truncated. Then call `copy_converted_text` or `download_converted_text` and confirm the visible action succeeds.
 12. Change the document, conversion mode, references option, or privacy findings. Confirm approval disappears immediately and content reads, copy, and download are blocked until the new fingerprint is reviewed.
 
+If the document contains a broken Markdown reference, Insights identifies the missing label and explains both supported fixes: add a definition such as `[docs]: https://example.test/docs`, or change the usage to an inline link such as `[documentation](https://example.test/docs)`. The label button should focus its matching usage in the input editor. If the human chooses to proceed without fixing it, the amber **Approve anyway and continue** action should remain available; the handoff stays marked **Review** with the approval recorded for that exact version.
+
 Expected: the agent can inspect and prepare the page, while a human reviews and explicitly approves the exact version before export.
 
 ### 0.4 Test WebMCP input validation and cancellation
